@@ -1,0 +1,37 @@
+{
+  "name": "entearazhy_backend",
+  "version": "1.0.0",
+  "description": "Building REST API's for mobile app, later extends to website also.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon",
+    "deploy": "firebase deploy --only functions:enteArazhyBackend"
+  },
+  "author": "Jerin Easo Regi",
+  "license": "MIT",
+  "devDependencies": {
+    "firebase-tools": "^15.8.0",
+    "nodemon": "^3.1.11",
+    "prettier": "^3.7.4"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.3",
+    "compression": "^1.8.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.2.1",
+    "firebase-admin": "^13.6.0",
+    "firebase-functions": "^7.0.2",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^8.20.2",
+    "multer": "^2.0.2",
+    "nodemailer": "^8.0.1"
+  },
+  "engines": {
+    "node": "22"
+  }
+}
