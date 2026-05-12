@@ -7,7 +7,10 @@ const {
   verifyRefreshToken
 } = require('../../../lib/jwt');
 
-// Register a new member
+/**
+ * Register a new member
+ * POST /register
+ */
 exports.register = async (req, res, next) => {
   try {
     const {
@@ -21,10 +24,26 @@ exports.register = async (req, res, next) => {
       password,
       gender,
       dob,
+      birthday,
+      houseNumber,
+      userName,
       role
     } = req.body;
 
-    // Check if member already exists
+    const normalizedHouseNumber = Number(
+      houseNumber != null ? houseNumber : userName
+    );
+
+    if (Number.isNaN(normalizedHouseNumber)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid house number is required'
+      });
+    }
+
+    const normalizedDob = dob || birthday;
+
+    /* Check if member already exists */
     if (email) {
       const existingMember = await Member.findOne({ email });
       if (existingMember) {
@@ -35,10 +54,21 @@ exports.register = async (req, res, next) => {
       }
     }
 
-    // Create fullName
+    const existingHouseNumberMember = await Member.findOne({
+      houseNumber: normalizedHouseNumber
+    });
+
+    if (existingHouseNumberMember) {
+      return res.status(400).json({
+        success: false,
+        message: 'House number already registered'
+      });
+    }
+
+    /* Construct full name */
     const fullName = lastName ? `${firstName} ${lastName}` : firstName;
 
-    // Create new member
+    /* Create new member document */
     const member = new Member({
       churchId,
       divisionId,
@@ -48,16 +78,17 @@ exports.register = async (req, res, next) => {
       fullName,
       email,
       phone,
+      houseNumber: normalizedHouseNumber,
       password,
       gender,
-      dob,
+      dob: normalizedDob,
       role: role || 'MEMBER',
       mustResetPassword: true
     });
 
     await member.save();
 
-    // Generate tokens
+    /* Generate JWT tokens */
     const payload = {
       id: member._id,
       role: member.role,
@@ -67,10 +98,10 @@ exports.register = async (req, res, next) => {
     const accessToken = generateAccessToken(payload);
     const refreshToken = generateRefreshToken(payload);
 
-    // Save refresh token
+    /* Store refresh token in database */
     await Token.create({ user: member._id, token: refreshToken });
 
-    // Remove password from response
+    /* Exclude password from response */
     const memberObj = member.toObject();
     delete memberObj.password;
 
@@ -88,20 +119,25 @@ exports.register = async (req, res, next) => {
   }
 };
 
-// Login
+/**
+ * Login member and issue JWT tokens
+ * POST /login
+ */
 exports.login = async (req, res, next) => {
   try {
     const { houseNumber, password } = req.body;
+    const normalizedHouseNumber = Number(houseNumber);
 
-    if (!houseNumber || !password) {
+    /* Check for null/undefined explicitly (0 is valid for admin) */
+    if (houseNumber == null || !password || Number.isNaN(normalizedHouseNumber)) {
       return res.status(400).json({
         success: false,
         message: 'House number and password are required'
       });
     }
 
-    // Find member by house number
-    const member = await Member.findOne({ houseNumber });
+    /* Lookup member by house number */
+    const member = await Member.findOne({ houseNumber: normalizedHouseNumber });
 
     if (!member) {
       return res.status(401).json({
@@ -110,7 +146,7 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    // Check if member is active
+    /* Verify member is active */
     if (!member.isActive) {
       return res.status(403).json({
         success: false,
@@ -118,8 +154,9 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    // Verify password
+    /* Validate password */
     const isPasswordValid = await bcrypt.compare(password, member.password);
+    
     if (!isPasswordValid) {
       return res.status(401).json({
         success: false,
@@ -127,7 +164,7 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    // Generate tokens
+    /* Generate JWT tokens */
     const payload = {
       id: member._id,
       role: member.role,
@@ -137,18 +174,18 @@ exports.login = async (req, res, next) => {
     const accessToken = generateAccessToken(payload);
     const refreshToken = generateRefreshToken(payload);
 
-    // Save refresh token
+    /* Store refresh token in database */
     await Token.create({ user: member._id, token: refreshToken });
 
-    // Set refresh token as HTTP-only cookie
+    /* Set secure HTTP-only cookie with refresh token */
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      maxAge: 7 * 24 * 60 * 60 * 1000 /* 7 days */
     });
 
-    // Remove password from response
+    /* Exclude password from response */
     const memberObj = member.toObject();
     delete memberObj.password;
 
@@ -166,7 +203,10 @@ exports.login = async (req, res, next) => {
   }
 };
 
-// Refresh token
+/**
+ * Refresh access token using refresh token
+ * POST /refresh
+ */
 exports.refreshToken = async (req, res, next) => {
   try {
     const refreshToken = req.cookies.refreshToken;
@@ -178,7 +218,7 @@ exports.refreshToken = async (req, res, next) => {
       });
     }
 
-    // Verify refresh token
+    /* Validate refresh token signature */
     let decoded;
     try {
       decoded = verifyRefreshToken(refreshToken);
@@ -189,7 +229,7 @@ exports.refreshToken = async (req, res, next) => {
       });
     }
 
-    // Check if token exists in database
+    /* Verify token exists in database */
     const tokenDoc = await Token.findOne({ token: refreshToken, user: decoded.id });
     if (!tokenDoc) {
       return res.status(401).json({
@@ -198,7 +238,7 @@ exports.refreshToken = async (req, res, next) => {
       });
     }
 
-    // Generate new tokens
+    /* Generate new token pair */
     const payload = {
       id: decoded.id,
       role: decoded.role,
@@ -208,16 +248,16 @@ exports.refreshToken = async (req, res, next) => {
     const newAccessToken = generateAccessToken(payload);
     const newRefreshToken = generateRefreshToken(payload);
 
-    // Delete old refresh token and save new one
+    /* Rotate refresh token: delete old, save new */
     await Token.deleteOne({ token: refreshToken });
     await Token.create({ user: decoded.id, token: newRefreshToken });
 
-    // Set new refresh token as HTTP-only cookie
+    /* Set new refresh token as secure HTTP-only cookie */
     res.cookie('refreshToken', newRefreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      maxAge: 7 * 24 * 60 * 60 * 1000 /* 7 days */
     });
 
     res.status(200).json({
@@ -232,7 +272,10 @@ exports.refreshToken = async (req, res, next) => {
   }
 };
 
-// Logout
+/**
+ * Logout member and invalidate refresh token
+ * POST /logout
+ */
 exports.logout = async (req, res, next) => {
   try {
     const { refreshToken } = req.cookies;
@@ -244,10 +287,10 @@ exports.logout = async (req, res, next) => {
       });
     }
 
-    // Delete refresh token from database
+    /* Revoke refresh token from database */
     await Token.deleteOne({ token: refreshToken });
 
-    // Clear cookie
+    /* Clear refresh token cookie */
     res.clearCookie('refreshToken');
 
     res.status(200).json({
@@ -259,7 +302,10 @@ exports.logout = async (req, res, next) => {
   }
 };
 
-// Change password
+/**
+ * Change password for authenticated member
+ * POST /change-password/:memberId
+ */
 exports.changePassword = async (req, res, next) => {
   try {
     const { memberId } = req.params;
@@ -273,7 +319,7 @@ exports.changePassword = async (req, res, next) => {
       });
     }
 
-    // Verify old password
+    /* Validate current password */
     const isPasswordValid = await bcrypt.compare(oldPassword, member.password);
     if (!isPasswordValid) {
       return res.status(401).json({
@@ -282,7 +328,7 @@ exports.changePassword = async (req, res, next) => {
       });
     }
 
-    // Update password
+    /* Update password (pre-save hook will hash it) */
     member.password = newPassword;
     member.mustResetPassword = false;
     await member.save();
@@ -296,7 +342,10 @@ exports.changePassword = async (req, res, next) => {
   }
 };
 
-// Reset password (for admin/vicar)
+/**
+ * Reset password for a member (admin/vicar only)
+ * POST /reset-password/:memberId
+ */
 exports.resetPassword = async (req, res, next) => {
   try {
     const { memberId } = req.params;
@@ -310,7 +359,7 @@ exports.resetPassword = async (req, res, next) => {
       });
     }
 
-    // Update password
+    /* Update password (pre-save hook will hash it) */
     member.password = newPassword;
     member.mustResetPassword = false;
     await member.save();
@@ -379,7 +428,7 @@ exports.resetPassword = async (req, res, next) => {
 //         member.fullName || member.firstName
 //       );
 //     } catch (emailError) {
-//       console.error('Failed to send password reset email:', emailError);
+//
 //       // Delete the token if email failed
 //       await Token.deleteOne({ token: hashedToken });
 //       return res.status(500).json({

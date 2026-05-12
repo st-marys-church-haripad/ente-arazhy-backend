@@ -1,6 +1,9 @@
 const Church = require('../../../models/church.model');
 
-// Create a new church
+/**
+ * Create a new church
+ * POST /
+ */
 exports.createChurch = async (req, res, next) => {
   try {
     const { name, address, phone, email } = req.body;
@@ -18,7 +21,10 @@ exports.createChurch = async (req, res, next) => {
   }
 };
 
-// Get all churches
+/**
+ * Get all churches
+ * GET /
+ */
 exports.getChurches = async (req, res, next) => {
   try {
     const churches = await Church.find();
@@ -33,7 +39,10 @@ exports.getChurches = async (req, res, next) => {
   }
 };
 
-// Get a single church by ID
+/**
+ * Get a single church by ID
+ * GET /:id
+ */
 exports.getChurchById = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -55,7 +64,10 @@ exports.getChurchById = async (req, res, next) => {
   }
 };
 
-// Update a church
+/**
+ * Update church information
+ * PUT /:id
+ */
 exports.updateChurch = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -84,7 +96,10 @@ exports.updateChurch = async (req, res, next) => {
   }
 };
 
-// Delete a church
+/**
+ * Delete a church
+ * DELETE /:id
+ */
 exports.deleteChurch = async (req, res, next) => {
   try {
     const { id } = req.params;

@@ -1,7 +1,10 @@
 const Family = require('../../../models/family.model');
 const Member = require('../../../models/member.model');
 
-// Create a new family
+/**
+ * Create a new family
+ * POST /
+ */
 exports.createFamily = async (req, res, next) => {
   try {
     const { churchId, divisionId, familyName, address, headMemberId } = req.body;
@@ -26,7 +29,10 @@ exports.createFamily = async (req, res, next) => {
   }
 };
 
-// Get all families with filters
+/**
+ * Get all families (optionally filtered by churchId/divisionId)
+ * GET /
+ */
 exports.getFamilies = async (req, res, next) => {
   try {
     const { churchId, divisionId } = req.query;
@@ -50,7 +56,10 @@ exports.getFamilies = async (req, res, next) => {
   }
 };
 
-// Get a single family by ID
+/**
+ * Get a single family by ID with populated relationships
+ * GET /:id
+ */
 exports.getFamilyById = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -75,7 +84,10 @@ exports.getFamilyById = async (req, res, next) => {
   }
 };
 
-// Get all members of a family
+/**
+ * Get all members belonging to a family
+ * GET /:id/members
+ */
 exports.getFamilyMembers = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -103,7 +115,10 @@ exports.getFamilyMembers = async (req, res, next) => {
   }
 };
 
-// Update a family
+/**
+ * Update family information
+ * PUT /:id
+ */
 exports.updateFamily = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -135,12 +150,15 @@ exports.updateFamily = async (req, res, next) => {
   }
 };
 
-// Delete a family
+/**
+ * Delete a family (only if no members exist)
+ * DELETE /:id
+ */
 exports.deleteFamily = async (req, res, next) => {
   try {
     const { id } = req.params;
     
-    // Check if family has members
+    /* Prevent deletion of families with members */
     const memberCount = await Member.countDocuments({ familyId: id });
     if (memberCount > 0) {
       return res.status(400).json({

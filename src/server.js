@@ -19,43 +19,50 @@ const v1Router = require('./routes');
 const app = express();
 const PORT = config.PORT || 3000;
 
-/* CORS */
+/* CORS Configuration */
 const corsOptions = {
   origin(origin, callback) {
-    if (
-      config.NODE_ENV === 'development' ||
-      !origin ||
-      config.WHITELIST_ORIGINS.includes(origin)
-    ) {
+    const isDevelopment = config.NODE_ENV === 'development';
+    const isAllowed = !origin || config.WHITELIST_ORIGINS.includes(origin);
+    
+    if (isDevelopment || isAllowed) {
       callback(null, true);
     } else {
-      callback(new Error(`CORS error: ${origin} is not allowed`), false);
+      const corsError = new Error(`CORS error: ${origin} is not allowed`);
+      corsError.statusCode = 403;
+      callback(corsError, false);
     }
-  }
+  },
+  credentials: true
 };
 
 app.use(cors(corsOptions));
 
-/* Middlewares */
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+/* Middleware Setup */
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 app.use(compression({ threshold: 1024 }));
-// app.use(helmet()); // Temporarily disabled for React Native testing
-app.use(limiter);
+app.use(helmet()); // Security headers
+app.use(limiter); // Rate limiting
 
 /* Static file serving for uploads */
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-/* Routes */
+/* Health Check Endpoint */
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+/* API Routes */
 app.use('/api/v1', v1Router);
 
-/* Error handler */
+/* Error Handler Middleware */
 app.use(errorHandler);
 
-/* Initialize database connection */
+/* Database Connection */
 connectToDatabase().catch((err) => {
-  console.error('Failed to connect to database:', err);
+  throw err;
 });
 
 /* Export for Cloud Functions */
@@ -63,12 +70,9 @@ module.exports = app;
 
 /* Start Server (for local development only) */
 if (require.main === module) {
-  const server = app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-  });
+  const server = app.listen(PORT);
 
   const shutdown = async () => {
-    console.log('Shutting down server...');
     await disconnectFromDatabase();
     server.close(() => process.exit(0));
   };

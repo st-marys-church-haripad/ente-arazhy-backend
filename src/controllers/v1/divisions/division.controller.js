@@ -1,6 +1,9 @@
 const Division = require('../../../models/division.model');
 
-// Create a new division
+/**
+ * Create a new division
+ * POST /
+ */
 exports.createDivision = async (req, res, next) => {
   try {
     const { churchId, name } = req.body;
@@ -18,7 +21,10 @@ exports.createDivision = async (req, res, next) => {
   }
 };
 
-// Get all divisions
+/**
+ * Get all divisions (optionally filtered by churchId)
+ * GET /
+ */
 exports.getDivisions = async (req, res, next) => {
   try {
     const { churchId } = req.query;
@@ -36,7 +42,10 @@ exports.getDivisions = async (req, res, next) => {
   }
 };
 
-// Get a single division by ID
+/**
+ * Get a single division by ID
+ * GET /:id
+ */
 exports.getDivisionById = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -58,7 +67,10 @@ exports.getDivisionById = async (req, res, next) => {
   }
 };
 
-// Update a division
+/**
+ * Update division information
+ * PUT /:id
+ */
 exports.updateDivision = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -87,7 +99,10 @@ exports.updateDivision = async (req, res, next) => {
   }
 };
 
-// Delete a division
+/**
+ * Delete a division
+ * DELETE /:id
+ */
 exports.deleteDivision = async (req, res, next) => {
   try {
     const { id } = req.params;

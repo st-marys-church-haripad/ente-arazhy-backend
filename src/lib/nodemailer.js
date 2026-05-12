@@ -13,12 +13,7 @@ const transporter = nodemailer.createTransport({
 });
 
 // Verify transporter configuration
-transporter.verify((error, success) => {
-  if (error) {
-    console.error('Email configuration error:', error);
-  } else {
-    console.log('Email server is ready to send messages');
-  }
+transporter.verify((_error, _success) => {
 });
 
 /**
@@ -137,10 +132,8 @@ const sendPasswordResetEmail = async (to, resetToken, userName) => {
     };
 
     const info = await transporter.sendMail(mailOptions);
-    console.log('Password reset email sent:', info.messageId);
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error('Error sending password reset email:', error);
     throw error;
   }
 };

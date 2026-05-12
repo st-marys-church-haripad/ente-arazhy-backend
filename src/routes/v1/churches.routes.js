@@ -9,10 +9,10 @@ const {
 const authenticate = require('../../middlewares/authenticate');
 
 // Church routes
-router.post('/', authenticate, createChurch);
-router.get('/', authenticate, getChurches);
-router.get('/:id', authenticate, getChurchById);
-router.put('/:id', authenticate, updateChurch);
-router.delete('/:id', authenticate, deleteChurch);
+router.post('/', createChurch);
+router.get('/', getChurches);
+router.get('/:id', getChurchById);
+router.put('/:id', updateChurch);
+router.delete('/:id', deleteChurch);
 
 module.exports = router;

@@ -6,21 +6,18 @@ const memberSchema = new mongoose.Schema({
   churchId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Church",
-    required: true,
     index: true
   },
 
   divisionId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Division",
-    required: true,
     index: true
   },
 
   familyId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Family",
-    required: true,
     index: true
   },
 
@@ -56,7 +53,7 @@ const memberSchema = new mongoose.Schema({
 
   role: {
     type: String,
-    enum: ["VICAR", "FAMILY_HEAD", "MEMBER"],
+    enum: ["ADMIN", "VICAR", "FAMILY_HEAD", "MEMBER"],
     default: "MEMBER"
   },
 

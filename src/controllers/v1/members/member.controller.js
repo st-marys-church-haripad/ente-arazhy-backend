@@ -1,5 +1,9 @@
 const Member = require('../../../models/member.model');
-// Create a new member
+
+/**
+ * Create a new member
+ * POST /
+ */
 exports.createMember = async (req, res, next) => {
   try {
     const {
@@ -23,7 +27,7 @@ exports.createMember = async (req, res, next) => {
       password
     } = req.body;
 
-    // Create fullName
+    /* Construct full name */
     const fullName = lastName ? `${firstName} ${lastName}` : firstName;
 
     const member = new Member({
@@ -50,7 +54,7 @@ exports.createMember = async (req, res, next) => {
 
     await member.save();
 
-    // Remove password from response
+    /* Exclude password from response */
     const memberObj = member.toObject();
     delete memberObj.password;
 
@@ -64,7 +68,11 @@ exports.createMember = async (req, res, next) => {
   }
 };
 
-// Get all members with filters
+/**
+ * Get all members with optional filters and enriched family relationships
+ * GET /
+ * Query: churchId, divisionId, familyId, isActive, search
+ */
 exports.getMembers = async (req, res, next) => {
   try {
     const { churchId, divisionId, familyId, isActive, search } = req.query;
@@ -75,7 +83,7 @@ exports.getMembers = async (req, res, next) => {
     if (familyId) filter.familyId = familyId;
     if (isActive !== undefined) filter.isActive = isActive === 'true';
 
-    // Text search if search param provided
+    /* Full-text search across member fields */
     if (search) {
       filter.$text = { $search: search };
     }
@@ -95,11 +103,11 @@ exports.getMembers = async (req, res, next) => {
       })
       .populate('parentIds', 'firstName lastName fullName');
 
-    // Enrich each member with family relationships
+    /* Enrich each member with family tree relationships */
     const enrichedMembers = await Promise.all(members.map(async (member) => {
       const memberData = member.toObject();
 
-      // Get children (members where this member is in their parentIds)
+      /* Get children (members with this member as parent) */
       const children = await Member.find({ parentIds: member._id })
         .select('-password')
         .populate({
@@ -111,7 +119,7 @@ exports.getMembers = async (req, res, next) => {
           }
         });
 
-      // Get grandchildren (children of children)
+      /* Get grandchildren (descendants of children) */
       const childrenIds = children.map(child => child._id);
       const grandchildren = childrenIds.length > 0 
         ? await Member.find({ parentIds: { $in: childrenIds } })
@@ -127,7 +135,7 @@ exports.getMembers = async (req, res, next) => {
             .populate('parentIds', 'firstName lastName fullName')
         : [];
 
-      // Get grandparents (parents of parents)
+      /* Get grandparents (ancestors up two generations) */
       const parentIds = member.parentIds?.map(parent => parent._id) || [];
       const grandparents = parentIds.length > 0
         ? await Member.find({ 
@@ -137,7 +145,7 @@ exports.getMembers = async (req, res, next) => {
             .populate('parentIds', 'firstName lastName fullName gender phone email avatarUrl')
         : [];
 
-      // Extract grandparents from parents' parentIds
+      /* Extract parents' parents (great-grandparents in relation) */
       const grandparentsList = [];
       for (const parent of grandparents) {
         if (parent.parentIds && parent.parentIds.length > 0) {
@@ -165,7 +173,10 @@ exports.getMembers = async (req, res, next) => {
   }
 };
 
-// Get a single member by ID
+/**
+ * Get a single member by ID with enriched family relationships
+ * GET /:id
+ */
 exports.getMemberById = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -191,7 +202,7 @@ exports.getMemberById = async (req, res, next) => {
       });
     }
 
-    // Get children (members where this member is in their parentIds)
+    /* Get children relationships */
     const children = await Member.find({ parentIds: id })
       .select('-password')
       .populate({
@@ -203,7 +214,7 @@ exports.getMemberById = async (req, res, next) => {
         }
       });
 
-    // Get grandchildren (children of children)
+    /* Get grandchildren relationships */
     const childrenIds = children.map(child => child._id);
     const grandchildren = await Member.find({ parentIds: { $in: childrenIds } })
       .select('-password')
@@ -217,7 +228,7 @@ exports.getMemberById = async (req, res, next) => {
       })
       .populate('parentIds', 'firstName lastName fullName');
 
-    // Get grandparents (parents of parents)
+    /* Get grandparents relationships */
     const parentIds = member.parentIds?.map(parent => parent._id) || [];
     const grandparents = await Member.find({ 
       _id: { $in: parentIds } 
@@ -225,7 +236,7 @@ exports.getMemberById = async (req, res, next) => {
       .select('-password')
       .populate('parentIds', 'firstName lastName fullName gender phone email avatarUrl');
 
-    // Extract grandparents from parents' parentIds
+    /* Extract great-grandparents from grandparents' parents */
     const grandparentsList = [];
     for (const parent of grandparents) {
       if (parent.parentIds && parent.parentIds.length > 0) {
@@ -250,13 +261,16 @@ exports.getMemberById = async (req, res, next) => {
   }
 };
 
-// Update a member
+/**
+ * Update member information
+ * PUT /:id
+ */
 exports.updateMember = async (req, res, next) => {
   try {
     const { id } = req.params;
     const updateData = { ...req.body };
 
-    // Update fullName if firstName or lastName changed
+    /* Recalculate fullName if name fields changed */
     if (updateData.firstName || updateData.lastName) {
       const member = await Member.findById(id);
       const firstName = updateData.firstName || member.firstName;
@@ -264,7 +278,7 @@ exports.updateMember = async (req, res, next) => {
       updateData.fullName = lastName ? `${firstName} ${lastName}` : firstName;
     }
 
-    // Don't allow password update through this endpoint
+    /* Prevent password modification via this endpoint */
     delete updateData.password;
 
     const member = await Member.findByIdAndUpdate(
@@ -296,7 +310,10 @@ exports.updateMember = async (req, res, next) => {
   }
 };
 
-// Delete a member (soft delete)
+/**
+ * Deactivate a member (soft delete)
+ * DELETE /:id
+ */
 exports.deleteMember = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -323,7 +340,10 @@ exports.deleteMember = async (req, res, next) => {
   }
 };
 
-// Permanently delete a member
+/**
+ * Permanently delete a member record
+ * DELETE /:id/permanent
+ */
 exports.permanentlyDeleteMember = async (req, res, next) => {
   try {
     const { id } = req.params;

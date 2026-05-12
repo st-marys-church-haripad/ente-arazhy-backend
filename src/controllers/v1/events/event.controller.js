@@ -1,6 +1,9 @@
 const Event = require('../../../models/event.model');
 
-// Create a new event
+/**
+ * Create a new event
+ * POST /
+ */
 exports.createEvent = async (req, res, next) => {
   try {
     const { eventName, date, time } = req.body;
@@ -18,7 +21,10 @@ exports.createEvent = async (req, res, next) => {
   }
 };
 
-// Get all events
+/**
+ * Get all events (sorted by date)
+ * GET /
+ */
 exports.getEvents = async (req, res, next) => {
   try {
     const events = await Event.find().sort({ date: 1 });
@@ -33,7 +39,10 @@ exports.getEvents = async (req, res, next) => {
   }
 };
 
-// Get a single event by ID
+/**
+ * Get a single event by ID
+ * GET /:id
+ */
 exports.getEventById = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -55,7 +64,10 @@ exports.getEventById = async (req, res, next) => {
   }
 };
 
-// Update an event
+/**
+ * Update event information
+ * PUT /:id
+ */
 exports.updateEvent = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -84,7 +96,10 @@ exports.updateEvent = async (req, res, next) => {
   }
 };
 
-// Delete an event
+/**
+ * Delete an event
+ * DELETE /:id
+ */
 exports.deleteEvent = async (req, res, next) => {
   try {
     const { id } = req.params;
