@@ -8,13 +8,14 @@ const {
   permanentlyDeleteMember
 } = require('../../controllers/v1/members/member.controller');
 const authenticate = require('../../middlewares/authenticate');
+const mustResetPassword = require('../../middlewares/mustResetPassword');
 
 // Member routes
-router.post('/', authenticate, createMember);
-router.get('/', authenticate, getMembers);
-router.get('/:id', authenticate, getMemberById);
-router.put('/:id', authenticate, updateMember);
-router.delete('/:id', authenticate, deleteMember);
-router.delete('/:id/permanent', authenticate, permanentlyDeleteMember);
+router.post('/', authenticate, mustResetPassword, createMember);
+router.get('/', authenticate, mustResetPassword, getMembers);
+router.get('/:id', authenticate, mustResetPassword, getMemberById);
+router.put('/:id', authenticate, mustResetPassword, updateMember);
+router.delete('/:id', authenticate, mustResetPassword, deleteMember);
+router.delete('/:id/permanent', authenticate, mustResetPassword, permanentlyDeleteMember);
 
 module.exports = router;

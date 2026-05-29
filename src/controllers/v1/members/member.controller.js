@@ -1,4 +1,30 @@
 const Member = require('../../../models/member.model');
+const Family = require('../../../models/family.model');
+
+const unlinkSpouseIfLinkedToMember = async (spouseId, memberId) => {
+  if (!spouseId) return;
+
+  await Member.updateOne(
+    { _id: spouseId, spouseId: memberId },
+    { $unset: { spouseId: 1 } }
+  );
+};
+
+const addMemberToFamily = async (familyId, memberId) => {
+  if (!familyId || !memberId) return;
+
+  await Family.findByIdAndUpdate(familyId, {
+    $addToSet: { memberIds: memberId }
+  });
+};
+
+const removeMemberFromFamily = async (familyId, memberId) => {
+  if (!familyId || !memberId) return;
+
+  await Family.findByIdAndUpdate(familyId, {
+    $pull: { memberIds: memberId }
+  });
+};
 
 /**
  * Create a new member
@@ -20,12 +46,39 @@ exports.createMember = async (req, res, next) => {
       phone,
       avatarUrl,
       spouseId,
-      parentIds,
       isFamilyHead,
       isVicar,
       role,
-      password
+      password,
+      isActive,
+      dateOfDeath
     } = req.body;
+
+    const hasIsActive = isActive !== undefined;
+    const normalizedIsActive =
+      typeof isActive === 'string' ? isActive.toLowerCase() === 'true' : Boolean(isActive);
+    const normalizedDateOfDeath = dateOfDeath || null;
+
+    let spouse = null;
+    if (spouseId) {
+      spouse = await Member.findById(spouseId).select('_id spouseId');
+      if (!spouse) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid spouseId: spouse member not found'
+        });
+      }
+    }
+
+    if (familyId) {
+      const family = await Family.findById(familyId).select('_id');
+      if (!family) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid familyId: family not found'
+        });
+      }
+    }
 
     /* Construct full name */
     const fullName = lastName ? `${firstName} ${lastName}` : firstName;
@@ -45,18 +98,30 @@ exports.createMember = async (req, res, next) => {
       phone,
       avatarUrl,
       spouseId,
-      parentIds,
       isFamilyHead,
       isVicar,
       role,
-      password
+      password,
+      isActive: hasIsActive ? normalizedIsActive : !normalizedDateOfDeath,
+      dateOfDeath: normalizedDateOfDeath
     });
 
     await member.save();
 
+    await addMemberToFamily(member.familyId, member._id);
+
+    if (spouse) {
+      if (spouse.spouseId && spouse.spouseId.toString() !== member._id.toString()) {
+        await unlinkSpouseIfLinkedToMember(spouse.spouseId, spouse._id);
+      }
+
+      await Member.findByIdAndUpdate(spouse._id, { spouseId: member._id });
+    }
+
     /* Exclude password from response */
     const memberObj = member.toObject();
     delete memberObj.password;
+    delete memberObj.parentIds;
 
     res.status(201).json({
       success: true,
@@ -71,11 +136,13 @@ exports.createMember = async (req, res, next) => {
 /**
  * Get all members with optional filters and enriched family relationships
  * GET /
- * Query: churchId, divisionId, familyId, isActive, search
+ * Query: churchId, divisionId, familyId, isActive, search, limit (default 50, max 100), skip (default 0)
  */
 exports.getMembers = async (req, res, next) => {
   try {
     const { churchId, divisionId, familyId, isActive, search } = req.query;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    const skip = Math.max(parseInt(req.query.skip) || 0, 0);
     
     const filter = {};
     if (churchId) filter.churchId = churchId;
@@ -89,84 +156,37 @@ exports.getMembers = async (req, res, next) => {
     }
 
     const members = await Member.find(filter)
-      .select('-password')
+      .limit(limit)
+      .skip(skip)
+      .select('-password -parentIds')
       .populate('churchId', 'name')
       .populate('divisionId', 'name')
-      .populate('familyId', 'familyName address')
       .populate({
-        path: 'spouseId',
-        select: 'firstName lastName fullName gender phone email avatarUrl parentIds',
-        populate: {
-          path: 'parentIds',
-          select: 'firstName lastName fullName gender phone email avatarUrl'
-        }
+        path: 'familyId',
+        select: 'familyName address headMemberId memberIds',
+        populate: [
+          { path: 'headMemberId', select: 'firstName lastName fullName' },
+          { path: 'memberIds', model: 'Member', select: 'firstName lastName fullName gender phone email avatarUrl spouseId' }
+        ]
       })
-      .populate('parentIds', 'firstName lastName fullName');
+      .lean();
 
-    /* Enrich each member with family tree relationships */
-    const enrichedMembers = await Promise.all(members.map(async (member) => {
-      const memberData = member.toObject();
-
-      /* Get children (members with this member as parent) */
-      const children = await Member.find({ parentIds: member._id })
-        .select('-password')
-        .populate({
-          path: 'spouseId',
-          select: 'firstName lastName fullName gender phone email avatarUrl parentIds',
-          populate: {
-            path: 'parentIds',
-            select: 'firstName lastName fullName gender phone email avatarUrl'
-          }
-        });
-
-      /* Get grandchildren (descendants of children) */
-      const childrenIds = children.map(child => child._id);
-      const grandchildren = childrenIds.length > 0 
-        ? await Member.find({ parentIds: { $in: childrenIds } })
-            .select('-password')
-            .populate({
-              path: 'spouseId',
-              select: 'firstName lastName fullName gender phone email avatarUrl parentIds',
-              populate: {
-                path: 'parentIds',
-                select: 'firstName lastName fullName gender phone email avatarUrl'
-              }
-            })
-            .populate('parentIds', 'firstName lastName fullName')
-        : [];
-
-      /* Get grandparents (ancestors up two generations) */
-      const parentIds = member.parentIds?.map(parent => parent._id) || [];
-      const grandparents = parentIds.length > 0
-        ? await Member.find({ 
-            _id: { $in: parentIds } 
-          })
-            .select('-password')
-            .populate('parentIds', 'firstName lastName fullName gender phone email avatarUrl')
-        : [];
-
-      /* Extract parents' parents (great-grandparents in relation) */
-      const grandparentsList = [];
-      for (const parent of grandparents) {
-        if (parent.parentIds && parent.parentIds.length > 0) {
-          const gps = await Member.find({ 
-            _id: { $in: parent.parentIds.map(p => p._id) } 
-          }).select('-password');
-          grandparentsList.push(...gps);
+    for (const member of members) {
+      // Remove spouseId from response
+      delete member.spouseId;
+      // Deep clone familyId to avoid mutating shared references
+      if (member.familyId && typeof member.familyId === 'object') {
+        member.familyId = JSON.parse(JSON.stringify(member.familyId));
+        if (Array.isArray(member.familyId.memberIds) && member.familyId.memberIds.length > 0) {
+          member.familyId.memberIds = member.familyId.memberIds.filter(fm => String(fm._id) !== String(member._id));
         }
       }
-
-      memberData.children = children;
-      memberData.grandchildren = grandchildren;
-      memberData.grandparents = grandparentsList;
-
-      return memberData;
-    }));
+    }
 
     res.status(200).json({
       success: true,
-      count: enrichedMembers.length,
-      data: enrichedMembers
+      count: members.length,
+      data: members
     });
   } catch (error) {
     next(error);
@@ -181,19 +201,18 @@ exports.getMemberById = async (req, res, next) => {
   try {
     const { id } = req.params;
     const member = await Member.findById(id)
-      .select('-password')
+      .select('-password -parentIds')
       .populate('churchId', 'name')
       .populate('divisionId', 'name')
-      .populate('familyId', 'familyName address')
       .populate({
-        path: 'spouseId',
-        select: 'firstName lastName fullName gender phone email avatarUrl parentIds',
-        populate: {
-          path: 'parentIds',
-          select: 'firstName lastName fullName gender phone email avatarUrl'
-        }
+        path: 'familyId',
+        select: 'familyName address headMemberId memberIds',
+        populate: [
+          { path: 'headMemberId', select: 'firstName lastName fullName' },
+          { path: 'memberIds', model: 'Member', select: 'firstName lastName fullName gender phone email avatarUrl spouseId' }
+        ]
       })
-      .populate('parentIds', 'firstName lastName fullName');
+      .lean();
 
     if (!member) {
       return res.status(404).json({
@@ -202,59 +221,19 @@ exports.getMemberById = async (req, res, next) => {
       });
     }
 
-    /* Get children relationships */
-    const children = await Member.find({ parentIds: id })
-      .select('-password')
-      .populate({
-        path: 'spouseId',
-        select: 'firstName lastName fullName gender phone email avatarUrl parentIds',
-        populate: {
-          path: 'parentIds',
-          select: 'firstName lastName fullName gender phone email avatarUrl'
-        }
-      });
-
-    /* Get grandchildren relationships */
-    const childrenIds = children.map(child => child._id);
-    const grandchildren = await Member.find({ parentIds: { $in: childrenIds } })
-      .select('-password')
-      .populate({
-        path: 'spouseId',
-        select: 'firstName lastName fullName gender phone email avatarUrl parentIds',
-        populate: {
-          path: 'parentIds',
-          select: 'firstName lastName fullName gender phone email avatarUrl'
-        }
-      })
-      .populate('parentIds', 'firstName lastName fullName');
-
-    /* Get grandparents relationships */
-    const parentIds = member.parentIds?.map(parent => parent._id) || [];
-    const grandparents = await Member.find({ 
-      _id: { $in: parentIds } 
-    })
-      .select('-password')
-      .populate('parentIds', 'firstName lastName fullName gender phone email avatarUrl');
-
-    /* Extract great-grandparents from grandparents' parents */
-    const grandparentsList = [];
-    for (const parent of grandparents) {
-      if (parent.parentIds && parent.parentIds.length > 0) {
-        const gps = await Member.find({ 
-          _id: { $in: parent.parentIds.map(p => p._id) } 
-        }).select('-password');
-        grandparentsList.push(...gps);
+    // Remove spouseId from response
+    delete member.spouseId;
+    // Deep clone familyId to avoid mutating shared references
+    if (member.familyId && typeof member.familyId === 'object') {
+      member.familyId = JSON.parse(JSON.stringify(member.familyId));
+      if (Array.isArray(member.familyId.memberIds) && member.familyId.memberIds.length > 0) {
+        member.familyId.memberIds = member.familyId.memberIds.filter(fm => String(fm._id) !== String(member._id));
       }
     }
 
-    const memberData = member.toObject();
-    memberData.children = children;
-    memberData.grandchildren = grandchildren;
-    memberData.grandparents = grandparentsList;
-
     res.status(200).json({
       success: true,
-      data: memberData
+      data: member
     });
   } catch (error) {
     next(error);
@@ -269,35 +248,111 @@ exports.updateMember = async (req, res, next) => {
   try {
     const { id } = req.params;
     const updateData = { ...req.body };
+    const memberBeforeUpdate = await Member.findById(id).select('firstName lastName spouseId familyId');
+
+    if (!memberBeforeUpdate) {
+      return res.status(404).json({
+        success: false,
+        message: 'Member not found'
+      });
+    }
+
+    const hasSpouseIdInPayload = Object.prototype.hasOwnProperty.call(updateData, 'spouseId');
+    const hasFamilyIdInPayload = Object.prototype.hasOwnProperty.call(updateData, 'familyId');
+
+    if (hasSpouseIdInPayload && updateData.spouseId === '') {
+      updateData.spouseId = null;
+    }
+
+    if (hasFamilyIdInPayload && updateData.familyId === '') {
+      updateData.familyId = null;
+    }
+
+    let spouseForUpdate = null;
+    if (hasSpouseIdInPayload && updateData.spouseId) {
+      if (updateData.spouseId.toString() === id.toString()) {
+        return res.status(400).json({
+          success: false,
+          message: 'A member cannot be spouse of themselves'
+        });
+      }
+
+      spouseForUpdate = await Member.findById(updateData.spouseId).select('_id spouseId');
+      if (!spouseForUpdate) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid spouseId: spouse member not found'
+        });
+      }
+    }
+
+    if (hasFamilyIdInPayload && updateData.familyId) {
+      const family = await Family.findById(updateData.familyId).select('_id');
+      if (!family) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid familyId: family not found'
+        });
+      }
+    }
 
     /* Recalculate fullName if name fields changed */
     if (updateData.firstName || updateData.lastName) {
-      const member = await Member.findById(id);
-      const firstName = updateData.firstName || member.firstName;
-      const lastName = updateData.lastName || member.lastName;
+      const firstName = updateData.firstName || memberBeforeUpdate.firstName;
+      const lastName = updateData.lastName || memberBeforeUpdate.lastName;
       updateData.fullName = lastName ? `${firstName} ${lastName}` : firstName;
     }
 
     /* Prevent password modification via this endpoint */
     delete updateData.password;
+    delete updateData.parentIds;
 
     const member = await Member.findByIdAndUpdate(
       id,
       updateData,
       { new: true, runValidators: true }
     )
-      .select('-password')
+      .select('-password -parentIds')
       .populate('churchId', 'name')
       .populate('divisionId', 'name')
-      .populate('familyId', 'familyName address')
-      .populate('spouseId', 'firstName lastName fullName')
-      .populate('parentIds', 'firstName lastName fullName');
+      .populate({
+        path: 'familyId',
+        select: 'familyName address headMemberId memberIds',
+        populate: [
+          { path: 'headMemberId', select: 'firstName lastName fullName' },
+          { path: 'memberIds', select: 'firstName lastName fullName gender phone email avatarUrl spouseId' }
+        ]
+      })
+      .populate('spouseId', 'firstName lastName fullName');
 
-    if (!member) {
-      return res.status(404).json({
-        success: false,
-        message: 'Member not found'
-      });
+    if (hasFamilyIdInPayload) {
+      const oldFamilyId = memberBeforeUpdate.familyId;
+      const newFamilyId = updateData.familyId || null;
+
+      if (oldFamilyId && (!newFamilyId || oldFamilyId.toString() !== newFamilyId.toString())) {
+        await removeMemberFromFamily(oldFamilyId, member._id);
+      }
+
+      if (newFamilyId && (!oldFamilyId || oldFamilyId.toString() !== newFamilyId.toString())) {
+        await addMemberToFamily(newFamilyId, member._id);
+      }
+    }
+
+    if (hasSpouseIdInPayload) {
+      const oldSpouseId = memberBeforeUpdate.spouseId;
+      const newSpouseId = updateData.spouseId || null;
+
+      if (oldSpouseId && (!newSpouseId || oldSpouseId.toString() !== newSpouseId.toString())) {
+        await unlinkSpouseIfLinkedToMember(oldSpouseId, member._id);
+      }
+
+      if (spouseForUpdate) {
+        if (spouseForUpdate.spouseId && spouseForUpdate.spouseId.toString() !== member._id.toString()) {
+          await unlinkSpouseIfLinkedToMember(spouseForUpdate.spouseId, spouseForUpdate._id);
+        }
+
+        await Member.findByIdAndUpdate(spouseForUpdate._id, { spouseId: member._id });
+      }
     }
 
     res.status(200).json({
@@ -355,6 +410,9 @@ exports.permanentlyDeleteMember = async (req, res, next) => {
         message: 'Member not found'
       });
     }
+
+    await removeMemberFromFamily(member.familyId, member._id);
+    await unlinkSpouseIfLinkedToMember(member.spouseId, member._id);
 
     res.status(200).json({
       success: true,

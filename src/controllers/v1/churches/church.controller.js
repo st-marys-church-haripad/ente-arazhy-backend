@@ -24,10 +24,14 @@ exports.createChurch = async (req, res, next) => {
 /**
  * Get all churches
  * GET /
+ * Query: limit (default 50, max 100), skip (default 0 for pagination)
  */
 exports.getChurches = async (req, res, next) => {
   try {
-    const churches = await Church.find();
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    const skip = Math.max(parseInt(req.query.skip) || 0, 0);
+
+    const churches = await Church.find().limit(limit).skip(skip);
 
     res.status(200).json({
       success: true,

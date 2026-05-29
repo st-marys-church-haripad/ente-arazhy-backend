@@ -29,6 +29,7 @@ const memberSchema = new mongoose.Schema({
   gender: String,
   dob: Date,
   marriageDate: Date,
+  maritalStatus: String,
 
   email: { type: String, sparse: true },
   phone: { type: String, sparse: true },
@@ -64,7 +65,7 @@ const memberSchema = new mongoose.Schema({
 
 }, { timestamps: true });
 
-memberSchema.index({ fullName: "text" });
+memberSchema.index({ fullName: "text", address: "text", firstName: "text", lastName: "text" });
 
 memberSchema.pre('save', async function (next) {
   if (!this.isModified('password') || !this.password) {

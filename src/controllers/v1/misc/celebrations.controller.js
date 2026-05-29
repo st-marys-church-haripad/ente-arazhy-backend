@@ -1,11 +1,12 @@
 const Member = require('../../../models/member.model');
+const Family = require('../../../models/family.model');
 
 /* ========== Helper Functions ========== */
 
 /**
- * Check if a member is alive (active and not deceased)
+ * Check if a member is active
  */
-const isAlive = (m) => m && m.isActive === true && !m.dateOfDeath;
+const isActiveMember = (m) => m && m.isActive === true;
 
 /**
  * Get start and end dates for the current week (Monday-Sunday)
@@ -77,6 +78,20 @@ const calcAnniversaryYears = (marriageDate, today) => {
   return years < 0 ? 0 : years;
 };
 
+/**
+ * Calculate years since a date (used for death anniversaries)
+ */
+const calcYearsSinceDate = (dateValue, today) => {
+  if (!dateValue) return null;
+  const d = new Date(dateValue);
+  let years = today.getFullYear() - d.getFullYear();
+
+  const thisYearDate = new Date(today.getFullYear(), d.getMonth(), d.getDate());
+  if (today < thisYearDate) years -= 1;
+
+  return years < 0 ? 0 : years;
+};
+
 /* ========== Controller ========== */
 
 /**
@@ -89,42 +104,78 @@ exports.getEventsSummary = async (req, res, next) => {
     const today = new Date();
     const { start: weekStart, end: weekEnd } = getWeekRange(today);
 
-    /* Load members with minimal fields for event checks */
+    // Fetch all members with familyId
     const members = await Member.find({})
-      .select('firstName lastName fullName dob marriageDate dateOfDeath isActive spouseId')
-      .populate('spouseId', 'firstName lastName fullName dateOfDeath isActive');
+      .select('firstName lastName fullName dob marriageDate dateOfDeath isActive spouseId familyId')
+      .lean();
 
-    /* Containers for event categories */
+    // Collect all familyIds
+    const familyIds = Array.from(new Set(members.map(m => m.familyId).filter(Boolean)));
+    const families = await Family.find({ _id: { $in: familyIds } })
+      .select('_id familyName')
+      .lean();
+    const familyById = new Map(families.map(f => [String(f._id), f.familyName]));
+
+    const memberById = new Map(members.map((member) => [String(member._id), member]));
+
+    // Helper to get member basic info
+    const getMemberBasic = (m) => ({
+      _id: m._id,
+      firstName: m.firstName,
+      lastName: m.lastName,
+      fullName: m.fullName,
+      familyName: familyById.get(String(m.familyId)) || null
+    });
+
+    // Containers for event categories
     const birthdayToday = [];
     const birthdayWeek = [];
     const anniversaryToday = [];
     const anniversaryWeek = [];
     const deathToday = [];
     const deathWeek = [];
+    const processedAnniversaryPairs = new Set();
 
-    /* Categorize events */
+    // Categorize events
     for (const m of members) {
-      const alive = isAlive(m);
-
-      /* Birthdays (only for living members) */
-      if (alive && m.dob) {
-        if (isTodayMatch(m.dob, today)) birthdayToday.push(m);
-        if (isInWeek(m.dob, weekStart, weekEnd, today)) birthdayWeek.push(m);
+      // Birthdays (only for active members)
+      if (isActiveMember(m) && m.dob) {
+        const isToday = isTodayMatch(m.dob, today);
+        const years = calcYearsSinceDate(m.dob, today);
+        const item = { member: getMemberBasic(m), years };
+        if (isToday) birthdayToday.push(item);
+        if (!isToday && isInWeek(m.dob, weekStart, weekEnd, today)) birthdayWeek.push(item);
       }
 
-      /* Anniversaries (both spouses must be alive) */
-      if (m.marriageDate && m.spouseId && isAlive(m) && isAlive(m.spouseId)) {
+      // Anniversaries (both spouses must be active)
+      if (m.marriageDate && m.spouseId && isActiveMember(m)) {
+        const spouse = memberById.get(String(m.spouseId));
+        if (!isActiveMember(spouse)) continue;
+
+        const memberId = String(m._id);
+        const spouseId = String(spouse._id);
+        const pairKey = [memberId, spouseId].sort().join(':');
+        if (processedAnniversaryPairs.has(pairKey)) continue;
+        processedAnniversaryPairs.add(pairKey);
+
         const years = calcAnniversaryYears(m.marriageDate, today);
-        const annivItem = { member: m, spouse: m.spouseId, years };
-
-        if (isTodayMatch(m.marriageDate, today)) anniversaryToday.push(annivItem);
-        if (isInWeek(m.marriageDate, weekStart, weekEnd, today)) anniversaryWeek.push(annivItem);
+        const annivItem = {
+          member: getMemberBasic(m),
+          spouse: getMemberBasic(spouse),
+          years
+        };
+        const isToday = isTodayMatch(m.marriageDate, today);
+        if (isToday) anniversaryToday.push(annivItem);
+        if (!isToday && isInWeek(m.marriageDate, weekStart, weekEnd, today)) anniversaryWeek.push(annivItem);
       }
 
-      /* Death anniversaries (for deceased members) */
-      if (m.dateOfDeath) {
-        if (isTodayMatch(m.dateOfDeath, today)) deathToday.push(m);
-        if (isInWeek(m.dateOfDeath, weekStart, weekEnd, today)) deathWeek.push(m);
+      // Death anniversaries (only for inactive members)
+      if (m.dateOfDeath && m.isActive === false) {
+        const isToday = isTodayMatch(m.dateOfDeath, today);
+        const years = calcYearsSinceDate(m.dateOfDeath, today);
+        const item = { member: getMemberBasic(m), years };
+        if (isToday) deathToday.push(item);
+        if (!isToday && isInWeek(m.dateOfDeath, weekStart, weekEnd, today)) deathWeek.push(item);
       }
     }
 

@@ -28,7 +28,7 @@ const authenticate = async (req, res, next) => {
     }
 
     /* Fetch current user role from database for authorization checks */
-    const user = await Member.findById(userId).select('role isActive');
+    const user = await Member.findById(userId).select('role isActive mustResetPassword');
     
     if (!user) {
       return res.status(401).json({
@@ -50,6 +50,7 @@ const authenticate = async (req, res, next) => {
       _id: userId,
       id: userId,
       role: user.role,
+      mustResetPassword: Boolean(user.mustResetPassword),
       userName: jwtPayload?.userName || jwtPayload?.username || null
     };
 

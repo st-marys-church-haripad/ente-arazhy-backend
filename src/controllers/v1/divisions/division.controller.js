@@ -24,13 +24,16 @@ exports.createDivision = async (req, res, next) => {
 /**
  * Get all divisions (optionally filtered by churchId)
  * GET /
+ * Query: churchId (optional), limit (default 50, max 100), skip (default 0)
  */
 exports.getDivisions = async (req, res, next) => {
   try {
     const { churchId } = req.query;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    const skip = Math.max(parseInt(req.query.skip) || 0, 0);
     const filter = churchId ? { churchId } : {};
     
-    const divisions = await Division.find(filter).populate('churchId', 'name');
+    const divisions = await Division.find(filter).populate('churchId', 'name').limit(limit).skip(skip);
 
     res.status(200).json({
       success: true,

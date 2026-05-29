@@ -27,7 +27,13 @@ const familySchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "Member",
     index: true
-  }
+  },
+
+  memberIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Member",
+    index: true
+  }]
 
 }, { timestamps: true });
 

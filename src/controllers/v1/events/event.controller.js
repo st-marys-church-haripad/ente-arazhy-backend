@@ -24,10 +24,14 @@ exports.createEvent = async (req, res, next) => {
 /**
  * Get all events (sorted by date)
  * GET /
+ * Query: limit (default 50, max 100), skip (default 0)
  */
 exports.getEvents = async (req, res, next) => {
   try {
-    const events = await Event.find().sort({ date: 1 });
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    const skip = Math.max(parseInt(req.query.skip) || 0, 0);
+    
+    const events = await Event.find().sort({ date: 1 }).limit(limit).skip(skip);
 
     res.status(200).json({
       success: true,

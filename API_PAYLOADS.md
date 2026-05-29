@@ -444,6 +444,7 @@ http://localhost:PORT/api/v1
     "familyName": "string",
     "address": "string",
     "headMemberId": "string",
+    "memberIds": ["string"],
     "createdAt": "timestamp",
     "updatedAt": "timestamp"
   }
@@ -470,6 +471,7 @@ http://localhost:PORT/api/v1
       "familyName": "string",
       "address": "string",
       "headMemberId": "string",
+      "memberIds": ["string"],
       "createdAt": "timestamp",
       "updatedAt": "timestamp"
     }
@@ -492,6 +494,7 @@ http://localhost:PORT/api/v1
     "familyName": "string",
     "address": "string",
     "headMemberId": "string",
+    "memberIds": ["string"],
     "createdAt": "timestamp",
     "updatedAt": "timestamp"
   }
@@ -595,7 +598,6 @@ http://localhost:PORT/api/v1
   "houseNumber": "number (optional)",
   "avatarUrl": "string (optional)",
   "spouseId": "string (MongoDB ID, optional)",
-  "parentIds": "array of MongoDB IDs (optional)",
   "role": "VICAR | FAMILY_HEAD | MEMBER (default: MEMBER)",
   "password": "string (optional)",
   "isFamilyHead": "boolean (optional)"
@@ -693,7 +695,6 @@ http://localhost:PORT/api/v1
     "age": "number",
     "avatarUrl": "string",
     "spouseId": "string",
-    "parentIds": ["string"],
     "role": "string",
     "isFamilyHead": "boolean",
     "isVicar": "boolean",
@@ -722,7 +723,6 @@ http://localhost:PORT/api/v1
   "houseNumber": "number (optional)",
   "avatarUrl": "string (optional)",
   "spouseId": "string (optional)",
-  "parentIds": "array (optional)",
   "role": "string (optional)",
   "isFamilyHead": "boolean (optional)",
   "isActive": "boolean (optional)"

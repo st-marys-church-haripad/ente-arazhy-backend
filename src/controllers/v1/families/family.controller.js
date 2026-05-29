@@ -32,10 +32,13 @@ exports.createFamily = async (req, res, next) => {
 /**
  * Get all families (optionally filtered by churchId/divisionId)
  * GET /
+ * Query: churchId (optional), divisionId (optional), limit (default 50, max 100), skip (default 0)
  */
 exports.getFamilies = async (req, res, next) => {
   try {
     const { churchId, divisionId } = req.query;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    const skip = Math.max(parseInt(req.query.skip) || 0, 0);
     
     const filter = {};
     if (churchId) filter.churchId = churchId;
@@ -44,7 +47,10 @@ exports.getFamilies = async (req, res, next) => {
     const families = await Family.find(filter)
       .populate('churchId', 'name')
       .populate('divisionId', 'name')
-      .populate('headMemberId', 'firstName lastName fullName');
+      .populate('headMemberId', 'firstName lastName fullName')
+      .populate('memberIds', 'firstName lastName fullName gender phone email avatarUrl spouseId familyId')
+      .limit(limit)
+      .skip(skip);
 
     res.status(200).json({
       success: true,
@@ -66,7 +72,8 @@ exports.getFamilyById = async (req, res, next) => {
     const family = await Family.findById(id)
       .populate('churchId', 'name')
       .populate('divisionId', 'name')
-      .populate('headMemberId', 'firstName lastName fullName');
+      .populate('headMemberId', 'firstName lastName fullName')
+      .populate('memberIds', 'firstName lastName fullName gender phone email avatarUrl spouseId familyId');
 
     if (!family) {
       return res.status(404).json({
@@ -92,7 +99,9 @@ exports.getFamilyMembers = async (req, res, next) => {
   try {
     const { id } = req.params;
     
-    const family = await Family.findById(id);
+    const family = await Family.findById(id)
+      .populate('memberIds', 'firstName lastName fullName gender phone email avatarUrl spouseId familyId');
+    
     if (!family) {
       return res.status(404).json({
         success: false,
@@ -100,10 +109,7 @@ exports.getFamilyMembers = async (req, res, next) => {
       });
     }
 
-    const members = await Member.find({ familyId: id })
-      .select('-password')
-      .populate('spouseId', 'firstName lastName fullName')
-      .populate('parentIds', 'firstName lastName fullName');
+    const members = family?.memberIds || [];
 
     res.status(200).json({
       success: true,
@@ -122,16 +128,17 @@ exports.getFamilyMembers = async (req, res, next) => {
 exports.updateFamily = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { churchId, divisionId, familyName, address, headMemberId } = req.body;
+    const { churchId, divisionId, familyName, address, headMemberId, memberIds } = req.body;
 
     const family = await Family.findByIdAndUpdate(
       id,
-      { churchId, divisionId, familyName, address, headMemberId },
+      { churchId, divisionId, familyName, address, headMemberId, memberIds },
       { new: true, runValidators: true }
     )
       .populate('churchId', 'name')
       .populate('divisionId', 'name')
-      .populate('headMemberId', 'firstName lastName fullName');
+      .populate('headMemberId', 'firstName lastName fullName')
+      .populate('memberIds', 'firstName lastName fullName gender phone email avatarUrl spouseId familyId');
 
     if (!family) {
       return res.status(404).json({
