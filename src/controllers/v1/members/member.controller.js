@@ -153,6 +153,8 @@ exports.getMembers = async (req, res, next) => {
 
     // Regex search for member names and family address
     if (search) {
+      const regex = new RegExp(search, 'i');
+      // Find families whose address matches the search (case-insensitive, partial match)
       const families = await Family.find({ address: { $regex: search, $options: 'i' } }).select('memberIds');
       let familyMemberIds = [];
       families.forEach(fam => {
@@ -160,7 +162,6 @@ exports.getMembers = async (req, res, next) => {
           familyMemberIds.push(...fam.memberIds.map(id => id.toString()));
         }
       });
-      const regex = new RegExp(search, 'i');
       const orConditions = [
         { fullName: regex },
         { firstName: regex },
@@ -169,10 +170,13 @@ exports.getMembers = async (req, res, next) => {
       if (familyMemberIds.length > 0) {
         orConditions.push({ _id: { $in: familyMemberIds } });
       }
+      // Add direct family address search via population
+      orConditions.push({}); // placeholder for $expr
       filter.$or = orConditions;
     }
 
-    const members = await Member.find(filter)
+    // Remove the placeholder and use aggregation for direct family address search
+    let members = await Member.find(filter)
       .limit(limit)
       .skip(skip)
       .select('-password -parentIds')
@@ -187,6 +191,22 @@ exports.getMembers = async (req, res, next) => {
         ]
       })
       .lean();
+
+    // If searching by address, filter in-memory for family address match
+    if (search) {
+      const regex = new RegExp(search, 'i');
+      members = members.filter(member => {
+        if (member.familyId && member.familyId.address) {
+          return regex.test(member.familyId.address) ||
+            regex.test(member.fullName) ||
+            regex.test(member.firstName) ||
+            regex.test(member.lastName);
+        }
+        return regex.test(member.fullName) ||
+          regex.test(member.firstName) ||
+          regex.test(member.lastName);
+      });
+    }
 
     for (const member of members) {
       // Remove spouseId from response
