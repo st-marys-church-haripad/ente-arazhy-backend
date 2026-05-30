@@ -24,13 +24,10 @@ transporter.verify((_error, _success) => {
  */
 const sendPasswordResetEmail = async (to, resetToken, userName) => {
   try {
-    // You can customize this URL to match your frontend
-    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
-    
     const mailOptions = {
       from: `"Ente Arazhy" <${config.EMAIL_FROM}>`,
       to: to,
-      subject: 'Password Reset Request',
+      subject: 'Password Reset Code',
       html: `
         <!DOCTYPE html>
         <html>
@@ -58,14 +55,15 @@ const sendPasswordResetEmail = async (to, resetToken, userName) => {
               padding: 30px;
               border-radius: 0 0 5px 5px;
             }
-            .button {
-              display: inline-block;
-              padding: 12px 30px;
-              background-color: #4CAF50;
-              color: white !important;
-              text-decoration: none;
-              border-radius: 5px;
+            .code-box {
+              background-color: #e8f5e9;
+              padding: 15px;
+              border-left: 4px solid #4CAF50;
               margin: 20px 0;
+              font-size: 1.5em;
+              letter-spacing: 4px;
+              text-align: center;
+              font-weight: bold;
             }
             .footer {
               margin-top: 20px;
@@ -74,38 +72,20 @@ const sendPasswordResetEmail = async (to, resetToken, userName) => {
               font-size: 12px;
               color: #666;
             }
-            .token-box {
-              background-color: #e8f5e9;
-              padding: 15px;
-              border-left: 4px solid #4CAF50;
-              margin: 20px 0;
-              word-break: break-all;
-            }
           </style>
         </head>
         <body>
           <div class="container">
             <div class="header">
-              <h1>Password Reset Request</h1>
+              <h1>Password Reset Code</h1>
             </div>
             <div class="content">
               <p>Hello ${userName},</p>
-              
               <p>We received a request to reset your password for your Ente Arazhy account. If you didn't make this request, you can safely ignore this email.</p>
-              
-              <p>To reset your password, click the button below:</p>
-              
-              <center>
-                <a href="${resetUrl}" class="button">Reset Password</a>
-              </center>
-              
-              <p>Or copy and paste this link into your browser:</p>
-              <div class="token-box">
-                ${resetUrl}
+              <p>Use the following code to reset your password. This code will expire in 1 hour.</p>
+              <div class="code-box">
+                ${resetToken}
               </div>
-              
-              <p><strong>This link will expire in 1 hour.</strong></p>
-              
               <div class="footer">
                 <p>If you did not request a password reset, please ignore this email or contact support if you have concerns.</p>
                 <p>&copy; ${new Date().getFullYear()} Ente Arazhy. All rights reserved.</p>
@@ -120,10 +100,8 @@ const sendPasswordResetEmail = async (to, resetToken, userName) => {
         
         We received a request to reset your password for your Ente Arazhy account.
         
-        To reset your password, visit this link:
-        ${resetUrl}
-        
-        This link will expire in 1 hour.
+        Use the following code to reset your password (valid for 1 hour):
+        ${resetToken}
         
         If you did not request a password reset, please ignore this email.
         

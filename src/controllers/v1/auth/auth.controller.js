@@ -47,7 +47,9 @@ exports.register = async (req, res, next) => {
       marriageDate,
       maritalStatus,
       isActive,
-      dateOfDeath
+      dateOfDeath,
+      bloodGroup,
+      profession
     } = req.body;
 
     const normalizedHouseNumber = Number(
@@ -125,7 +127,9 @@ exports.register = async (req, res, next) => {
       isFamilyHead: Boolean(isFamilyHead) || normalizedRole === 'FAMILY_HEAD',
       isActive: hasIsActive ? normalizedIsActive : !normalizedDateOfDeath,
       dateOfDeath: normalizedDateOfDeath,
-      mustResetPassword: true
+      mustResetPassword: true,
+      bloodGroup,
+      profession
     });
 
     await member.save();
@@ -585,67 +589,6 @@ exports.resetPassword = async (req, res, next) => {
  * Forgot password - send reset email
  * POST /forgot-password
  */
-exports.forgotPassword = async (req, res, next) => {
-  try {
-    const { email } = req.body;
-
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email is required'
-      });
-    }
-
-    const normalizedEmail = String(email).trim().toLowerCase();
-
-    // Always return success message to prevent email enumeration.
-    const genericSuccess = {
-      success: true,
-      message: 'If an account exists with this email, a password reset link has been sent'
-    };
-
-    const member = await Member.findOne({ email: normalizedEmail });
-
-    if (!member || !member.isActive) {
-      return res.status(200).json(genericSuccess);
-    }
-
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    const hashedToken = crypto
-      .createHash('sha256')
-      .update(resetToken)
-      .digest('hex');
-
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
-
-    await Token.create({
-      user: member._id,
-      token: hashedToken,
-      type: 'passwordReset',
-      expiresAt
-    });
-
-    try {
-      await sendPasswordResetEmail(
-        member.email,
-        resetToken,
-        member.fullName || member.firstName
-      );
-    } catch (_emailError) {
-      await Token.deleteOne({ token: hashedToken, type: 'passwordReset' });
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to send password reset email. Please try again later.'
-      });
-    }
-
-    return res.status(200).json(genericSuccess);
-  } catch (error) {
-    next(error);
-  }
-};
-
-// Forgot password - send reset email
 // exports.forgotPassword = async (req, res, next) => {
 //   try {
 //     const { email } = req.body;
@@ -657,34 +600,28 @@ exports.forgotPassword = async (req, res, next) => {
 //       });
 //     }
 
-//     // Find member by email
-//     const member = await Member.findOne({ email: email.toLowerCase() });
+//     const normalizedEmail = String(email).trim().toLowerCase();
 
-//     // Always return success message to prevent email enumeration
-//     if (!member) {
-//       return res.status(200).json({
-//         success: true,
-//         message: 'If an account exists with this email, a password reset link has been sent'
-//       });
+//     // Always return success message to prevent email enumeration.
+//     const genericSuccess = {
+//       success: true,
+//       message: 'If an account exists with this email, a password reset link has been sent'
+//     };
+
+//     const member = await Member.findOne({ email: normalizedEmail });
+
+//     if (!member || !member.isActive) {
+//       return res.status(200).json(genericSuccess);
 //     }
 
-//     // Check if member is active
-//     if (!member.isActive) {
-//       return res.status(200).json({
-//         success: true,
-//         message: 'If an account exists with this email, a password reset link has been sent'
-//       });
-//     }
-
-//     // Generate reset token
 //     const resetToken = crypto.randomBytes(32).toString('hex');
 //     const hashedToken = crypto
 //       .createHash('sha256')
 //       .update(resetToken)
 //       .digest('hex');
 
-//     // Store hashed token in database with 1 hour expiry
-//     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+//     const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
 //     await Token.create({
 //       user: member._id,
 //       token: hashedToken,
@@ -692,31 +629,97 @@ exports.forgotPassword = async (req, res, next) => {
 //       expiresAt
 //     });
 
-//     // Send email with reset token (not hashed)
 //     try {
 //       await sendPasswordResetEmail(
 //         member.email,
 //         resetToken,
 //         member.fullName || member.firstName
 //       );
-//     } catch (emailError) {
-//
-//       // Delete the token if email failed
-//       await Token.deleteOne({ token: hashedToken });
+//     } catch (_emailError) {
+//       await Token.deleteOne({ token: hashedToken, type: 'passwordReset' });
 //       return res.status(500).json({
 //         success: false,
 //         message: 'Failed to send password reset email. Please try again later.'
 //       });
 //     }
 
-//     res.status(200).json({
-//       success: true,
-//       message: 'Password reset link has been sent to your email'
-//     });
+//     return res.status(200).json(genericSuccess);
 //   } catch (error) {
 //     next(error);
 //   }
 // };
+
+// Forgot password - send reset email
+exports.forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required'
+      });
+    }
+
+    // Find member by email
+    const member = await Member.findOne({ email: email.toLowerCase() });
+
+    // Always return success message to prevent email enumeration
+    if (!member) {
+      return res.status(200).json({
+        success: true,
+        message: 'If an account exists with this email, a password reset link has been sent'
+      });
+    }
+
+    // Check if member is active
+    if (!member.isActive) {
+      return res.status(200).json({
+        success: true,
+        message: 'If an account exists with this email, a password reset link has been sent'
+      });
+    }
+
+    // Generate a 6-digit numeric code
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashedCode = crypto
+      .createHash('sha256')
+      .update(resetCode)
+      .digest('hex');
+
+    // Store hashed code in database with 1 hour expiry
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    await Token.create({
+      user: member._id,
+      token: hashedCode,
+      type: 'passwordReset',
+      expiresAt
+    });
+
+    // Send email with the code (not hashed)
+    try {
+      await sendPasswordResetEmail(
+        member.email,
+        resetCode, // send the code, not a link
+        member.fullName || member.firstName
+      );
+    } catch (emailError) {
+      // Delete the token if email failed
+      await Token.deleteOne({ token: hashedCode });
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to send password reset email. Please try again later.'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'A password reset code has been sent to your email.'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 // // Reset password with token
 // exports.resetPasswordWithToken = async (req, res, next) => {

@@ -35,7 +35,11 @@ const memberSchema = new mongoose.Schema({
   phone: { type: String, sparse: true },
   age: { type: Number, default: null },
 
+
   avatarUrl: String,
+
+  bloodGroup: { type: String },
+  profession: { type: String },
 
   spouseId: {
     type: mongoose.Schema.Types.ObjectId,

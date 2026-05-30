@@ -31,6 +31,7 @@ const removeMemberFromFamily = async (familyId, memberId) => {
  * POST /
  */
 exports.createMember = async (req, res, next) => {
+    console.log('Create Member Payload:', req.body);
   try {
     const {
       churchId,
@@ -51,7 +52,9 @@ exports.createMember = async (req, res, next) => {
       role,
       password,
       isActive,
-      dateOfDeath
+      dateOfDeath,
+      bloodGroup,
+      profession
     } = req.body;
 
     const hasIsActive = isActive !== undefined;
@@ -103,7 +106,9 @@ exports.createMember = async (req, res, next) => {
       role,
       password,
       isActive: hasIsActive ? normalizedIsActive : !normalizedDateOfDeath,
-      dateOfDeath: normalizedDateOfDeath
+      dateOfDeath: normalizedDateOfDeath,
+      bloodGroup,
+      profession
     });
 
     await member.save();
@@ -175,7 +180,10 @@ exports.getMembers = async (req, res, next) => {
       filter.$or = orConditions;
     }
 
-    // Remove the placeholder and use aggregation for direct family address search
+
+    // Get total count before pagination (and before in-memory filter)
+    let count = await Member.countDocuments(filter);
+
     let members = await Member.find(filter)
       .limit(limit)
       .skip(skip)
@@ -187,7 +195,7 @@ exports.getMembers = async (req, res, next) => {
         select: 'familyName address headMemberId memberIds',
         populate: [
           { path: 'headMemberId', select: 'firstName lastName fullName' },
-          { path: 'memberIds', model: 'Member', select: 'firstName lastName fullName gender phone email avatarUrl spouseId' }
+          { path: 'memberIds', model: 'Member', select: 'firstName lastName fullName gender phone email avatarUrl spouseId bloodGroup profession' }
         ]
       })
       .lean();
@@ -206,6 +214,8 @@ exports.getMembers = async (req, res, next) => {
           regex.test(member.firstName) ||
           regex.test(member.lastName);
       });
+      // After in-memory filter, update totalCount to reflect filtered results
+      count = members.length;
     }
 
     for (const member of members) {
@@ -222,7 +232,8 @@ exports.getMembers = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      count: members.length,
+      count, // total number of matching members (before pagination or after in-memory filter)
+      pageCount: members.length, // number of members in this page
       data: members
     });
   } catch (error) {
@@ -246,7 +257,7 @@ exports.getMemberById = async (req, res, next) => {
         select: 'familyName address headMemberId memberIds',
         populate: [
           { path: 'headMemberId', select: 'firstName lastName fullName' },
-          { path: 'memberIds', model: 'Member', select: 'firstName lastName fullName gender phone email avatarUrl spouseId' }
+          { path: 'memberIds', model: 'Member', select: 'firstName lastName fullName gender phone email avatarUrl spouseId bloodGroup profession' }
         ]
       })
       .lean();
@@ -357,7 +368,7 @@ exports.updateMember = async (req, res, next) => {
         select: 'familyName address headMemberId memberIds',
         populate: [
           { path: 'headMemberId', select: 'firstName lastName fullName' },
-          { path: 'memberIds', select: 'firstName lastName fullName gender phone email avatarUrl spouseId' }
+          { path: 'memberIds', select: 'firstName lastName fullName gender phone email avatarUrl spouseId bloodGroup profession' }
         ]
       })
       .populate('spouseId', 'firstName lastName fullName');
