@@ -11,11 +11,11 @@ const authenticate = require('../../middlewares/authenticate');
 const mustResetPassword = require('../../middlewares/mustResetPassword');
 
 // Member routes
-router.post('/', authenticate, mustResetPassword, createMember);
-router.get('/', authenticate, mustResetPassword, getMembers);
-router.get('/:id', authenticate, mustResetPassword, getMemberById);
-router.put('/:id', authenticate, mustResetPassword, updateMember);
-router.delete('/:id', authenticate, mustResetPassword, deleteMember);
-router.delete('/:id/permanent', authenticate, mustResetPassword, permanentlyDeleteMember);
+router.post('/',  createMember);
+router.get('/',  getMembers);
+router.get('/:id',  getMemberById);
+router.put('/:id',  updateMember);
+router.delete('/:id',  deleteMember);
+router.delete('/:id/permanent',  permanentlyDeleteMember);
 
 module.exports = router;

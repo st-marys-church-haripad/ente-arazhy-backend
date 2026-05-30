@@ -71,7 +71,6 @@ module.exports = app;
 /* Start Server (for local development only) */
 if (require.main === module) {
   const server = app.listen(PORT);
-
   const shutdown = async () => {
     await disconnectFromDatabase();
     server.close(() => process.exit(0));

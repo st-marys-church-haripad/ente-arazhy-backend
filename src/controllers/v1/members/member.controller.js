@@ -150,9 +150,26 @@ exports.getMembers = async (req, res, next) => {
     if (familyId) filter.familyId = familyId;
     if (isActive !== undefined) filter.isActive = isActive === 'true';
 
-    /* Full-text search across member fields */
+
+    // Regex search for member names and family address
     if (search) {
-      filter.$text = { $search: search };
+      const families = await Family.find({ address: { $regex: search, $options: 'i' } }).select('memberIds');
+      let familyMemberIds = [];
+      families.forEach(fam => {
+        if (Array.isArray(fam.memberIds)) {
+          familyMemberIds.push(...fam.memberIds.map(id => id.toString()));
+        }
+      });
+      const regex = new RegExp(search, 'i');
+      const orConditions = [
+        { fullName: regex },
+        { firstName: regex },
+        { lastName: regex }
+      ];
+      if (familyMemberIds.length > 0) {
+        orConditions.push({ _id: { $in: familyMemberIds } });
+      }
+      filter.$or = orConditions;
     }
 
     const members = await Member.find(filter)
@@ -416,7 +433,8 @@ exports.permanentlyDeleteMember = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      message: 'Member permanently deleted'
+      message: 'Member permanently deleted',
+      data: member
     });
   } catch (error) {
     next(error);
