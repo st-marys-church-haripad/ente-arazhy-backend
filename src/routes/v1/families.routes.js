@@ -11,11 +11,11 @@ const authenticate = require('../../middlewares/authenticate');
 const mustResetPassword = require('../../middlewares/mustResetPassword');
 
 // Family routes
-router.post('/',  createFamily);
-router.get('/',  getFamilies);
-router.get('/:id',  getFamilyById);
-router.get('/:id/members',  getFamilyMembers);
-router.put('/:id',  updateFamily);
-router.delete('/:id',  deleteFamily);
+router.post('/', authenticate, mustResetPassword, createFamily);
+router.get('/', authenticate, mustResetPassword, getFamilies);
+router.get('/:id', authenticate, mustResetPassword, getFamilyById);
+router.get('/:id/members', authenticate, mustResetPassword, getFamilyMembers);
+router.put('/:id', authenticate, mustResetPassword, updateFamily);
+router.delete('/:id', authenticate, mustResetPassword, deleteFamily);
 
 module.exports = router;
