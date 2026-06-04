@@ -1,5 +1,5 @@
 const Member = require('../../../models/member.model');
-const Token = require('../../../models/token.model');
+const Family = require('../../../models/family.model');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const {
@@ -11,6 +11,84 @@ const {
   generateRefreshToken,
   verifyRefreshToken
 } = require('../../../lib/jwt');
+
+const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const RESET_CODE_TTL_MS = 60 * 60 * 1000;
+
+// Controller-local session/reset stores to avoid a separate token collection.
+const refreshTokenStore = new Map(); // token -> { userId, expiresAt }
+const userRefreshIndex = new Map(); // userId -> Set(token)
+const passwordResetStore = new Map(); // userId -> { hashedCode, expiresAt }
+
+const cleanupRefreshTokens = () => {
+  const now = Date.now();
+  for (const [token, payload] of refreshTokenStore.entries()) {
+    if (payload.expiresAt <= now) {
+      refreshTokenStore.delete(token);
+      const tokens = userRefreshIndex.get(payload.userId);
+      if (tokens) {
+        tokens.delete(token);
+        if (tokens.size === 0) userRefreshIndex.delete(payload.userId);
+      }
+    }
+  }
+};
+
+const cleanupResetCodes = () => {
+  const now = Date.now();
+  for (const [userId, payload] of passwordResetStore.entries()) {
+    if (payload.expiresAt <= now) {
+      passwordResetStore.delete(userId);
+    }
+  }
+};
+
+const storeRefreshToken = (userId, token) => {
+  cleanupRefreshTokens();
+  const expiresAt = Date.now() + REFRESH_TTL_MS;
+  refreshTokenStore.set(token, { userId: String(userId), expiresAt });
+
+  if (!userRefreshIndex.has(String(userId))) {
+    userRefreshIndex.set(String(userId), new Set());
+  }
+  userRefreshIndex.get(String(userId)).add(token);
+};
+
+const revokeRefreshToken = (token) => {
+  const payload = refreshTokenStore.get(token);
+  if (!payload) return;
+
+  refreshTokenStore.delete(token);
+  const tokens = userRefreshIndex.get(payload.userId);
+  if (tokens) {
+    tokens.delete(token);
+    if (tokens.size === 0) userRefreshIndex.delete(payload.userId);
+  }
+};
+
+const isRefreshTokenActive = (userId, token) => {
+  cleanupRefreshTokens();
+  const payload = refreshTokenStore.get(token);
+  if (!payload) return false;
+  return payload.userId === String(userId) && payload.expiresAt > Date.now();
+};
+
+const storeResetCode = (userId, hashedCode) => {
+  cleanupResetCodes();
+  passwordResetStore.set(String(userId), {
+    hashedCode,
+    expiresAt: Date.now() + RESET_CODE_TTL_MS
+  });
+};
+
+const getResetCode = (userId) => {
+  cleanupResetCodes();
+  return passwordResetStore.get(String(userId));
+};
+
+const clearResetCode = (userId) => {
+  passwordResetStore.delete(String(userId));
+};
 
 const unlinkSpouseIfLinkedToMember = async (spouseId, memberId) => {
   if (!spouseId) return;
@@ -25,7 +103,6 @@ const unlinkSpouseIfLinkedToMember = async (spouseId, memberId) => {
  * Register a new member
  * POST /register
  */
-const Family = require('../../../models/family.model');
 exports.register = async (req, res, next) => {
   try {
     const {
@@ -82,7 +159,6 @@ exports.register = async (req, res, next) => {
       }
     }
 
-    /* Check if member already exists */
     if (email) {
       const existingMember = await Member.findOne({ email });
       if (existingMember) {
@@ -93,21 +169,8 @@ exports.register = async (req, res, next) => {
       }
     }
 
-    // const existingHouseNumberMember = await Member.findOne({
-    //   houseNumber: normalizedHouseNumber
-    // });
-
-    // if (existingHouseNumberMember) {
-    //   return res.status(400).json({
-    //     success: false,
-    //     message: 'House number already registered'
-    //   });
-    // }
-
-    /* Construct full name */
     const fullName = lastName ? `${firstName} ${lastName}` : firstName;
 
-    /* Create new member document */
     const member = new Member({
       churchId,
       divisionId,
@@ -133,10 +196,8 @@ exports.register = async (req, res, next) => {
       profession
     });
 
-
     await member.save();
 
-    // Map this member to the family's memberIds array if familyId is provided
     if (familyId) {
       await Family.findByIdAndUpdate(
         familyId,
@@ -153,7 +214,6 @@ exports.register = async (req, res, next) => {
       await Member.findByIdAndUpdate(spouse._id, { spouseId: member._id });
     }
 
-    /* Exclude password from response */
     const memberObj = member.toObject();
     delete memberObj.password;
 
@@ -178,7 +238,6 @@ exports.login = async (req, res, next) => {
     const { houseNumber, password } = req.body;
     const normalizedHouseNumber = Number(houseNumber);
 
-    /* Check for null/undefined explicitly (0 is valid for admin) */
     if (houseNumber == null || !password || Number.isNaN(normalizedHouseNumber)) {
       return res.status(400).json({
         success: false,
@@ -186,7 +245,6 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    /* Lookup member by house number */
     const member = await Member.findOne({ houseNumber: normalizedHouseNumber });
 
     if (!member) {
@@ -203,7 +261,6 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    /* Verify member is active */
     if (!member.isActive) {
       return res.status(403).json({
         success: false,
@@ -211,9 +268,8 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    /* Validate password */
     const isPasswordValid = await bcrypt.compare(password, member.password);
-    
+
     if (!isPasswordValid) {
       return res.status(401).json({
         success: false,
@@ -221,7 +277,6 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    /* Generate JWT tokens */
     const payload = {
       id: member._id,
       role: member.role,
@@ -230,19 +285,15 @@ exports.login = async (req, res, next) => {
 
     const accessToken = generateAccessToken(payload);
     const refreshToken = generateRefreshToken(payload);
+    storeRefreshToken(member._id, refreshToken);
 
-    /* Store refresh token in database */
-    await Token.create({ user: member._id, token: refreshToken });
-
-    /* Set secure HTTP-only cookie with refresh token */
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000 /* 7 days */
+      maxAge: REFRESH_TTL_MS
     });
 
-    /* Exclude password from response */
     const memberObj = member.toObject();
     delete memberObj.password;
 
@@ -275,27 +326,23 @@ exports.refreshToken = async (req, res, next) => {
       });
     }
 
-    /* Validate refresh token signature */
     let decoded;
     try {
       decoded = verifyRefreshToken(refreshToken);
-    } catch (error) {
+    } catch (_error) {
       return res.status(401).json({
         success: false,
         message: 'Invalid or expired refresh token'
       });
     }
 
-    /* Verify token exists in database */
-    const tokenDoc = await Token.findOne({ token: refreshToken, user: decoded.id });
-    if (!tokenDoc) {
+    if (!isRefreshTokenActive(decoded.id, refreshToken)) {
       return res.status(401).json({
         success: false,
         message: 'Invalid refresh token'
       });
     }
 
-    /* Generate new token pair */
     const payload = {
       id: decoded.id,
       role: decoded.role,
@@ -305,16 +352,14 @@ exports.refreshToken = async (req, res, next) => {
     const newAccessToken = generateAccessToken(payload);
     const newRefreshToken = generateRefreshToken(payload);
 
-    /* Rotate refresh token: delete old, save new */
-    await Token.deleteOne({ token: refreshToken });
-    await Token.create({ user: decoded.id, token: newRefreshToken });
+    revokeRefreshToken(refreshToken);
+    storeRefreshToken(decoded.id, newRefreshToken);
 
-    /* Set new refresh token as secure HTTP-only cookie */
     res.cookie('refreshToken', newRefreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000 /* 7 days */
+      maxAge: REFRESH_TTL_MS
     });
 
     res.status(200).json({
@@ -344,10 +389,8 @@ exports.logout = async (req, res, next) => {
       });
     }
 
-    /* Revoke refresh token from database */
-    await Token.deleteOne({ token: refreshToken });
+    revokeRefreshToken(refreshToken);
 
-    /* Clear refresh token cookie */
     res.clearCookie('refreshToken');
 
     res.status(200).json({
@@ -393,7 +436,6 @@ exports.changePassword = async (req, res, next) => {
       });
     }
 
-    /* Validate current password */
     const isPasswordValid = await bcrypt.compare(oldPassword, member.password);
     if (!isPasswordValid) {
       return res.status(401).json({
@@ -402,7 +444,6 @@ exports.changePassword = async (req, res, next) => {
       });
     }
 
-    /* Update password (pre-save hook will hash it) */
     member.password = newPassword;
     member.mustResetPassword = false;
     await member.save();
@@ -582,7 +623,6 @@ exports.resetPassword = async (req, res, next) => {
       });
     }
 
-    /* Update password (pre-save hook will hash it) */
     member.password = newPassword;
     member.mustResetPassword = false;
     await member.save();
@@ -597,70 +637,9 @@ exports.resetPassword = async (req, res, next) => {
 };
 
 /**
- * Forgot password - send reset email
+ * Forgot password - send reset code by email
  * POST /forgot-password
  */
-// exports.forgotPassword = async (req, res, next) => {
-//   try {
-//     const { email } = req.body;
-
-//     if (!email) {
-//       return res.status(400).json({
-//         success: false,
-//         message: 'Email is required'
-//       });
-//     }
-
-//     const normalizedEmail = String(email).trim().toLowerCase();
-
-//     // Always return success message to prevent email enumeration.
-//     const genericSuccess = {
-//       success: true,
-//       message: 'If an account exists with this email, a password reset link has been sent'
-//     };
-
-//     const member = await Member.findOne({ email: normalizedEmail });
-
-//     if (!member || !member.isActive) {
-//       return res.status(200).json(genericSuccess);
-//     }
-
-//     const resetToken = crypto.randomBytes(32).toString('hex');
-//     const hashedToken = crypto
-//       .createHash('sha256')
-//       .update(resetToken)
-//       .digest('hex');
-
-//     const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
-
-//     await Token.create({
-//       user: member._id,
-//       token: hashedToken,
-//       type: 'passwordReset',
-//       expiresAt
-//     });
-
-//     try {
-//       await sendPasswordResetEmail(
-//         member.email,
-//         resetToken,
-//         member.fullName || member.firstName
-//       );
-//     } catch (_emailError) {
-//       await Token.deleteOne({ token: hashedToken, type: 'passwordReset' });
-//       return res.status(500).json({
-//         success: false,
-//         message: 'Failed to send password reset email. Please try again later.'
-//       });
-//     }
-
-//     return res.status(200).json(genericSuccess);
-//   } catch (error) {
-//     next(error);
-//   }
-// };
-
-// Forgot password - send reset email
 exports.forgotPassword = async (req, res, next) => {
   try {
     const { email } = req.body;
@@ -672,51 +651,32 @@ exports.forgotPassword = async (req, res, next) => {
       });
     }
 
-    // Find member by email
-    const member = await Member.findOne({ email: email.toLowerCase() });
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const member = await Member.findOne({ email: normalizedEmail });
 
-    // Always return success message to prevent email enumeration
-    if (!member) {
+    if (!member || !member.isActive) {
       return res.status(200).json({
         success: true,
         message: 'If an account exists with this email, a password reset link has been sent'
       });
     }
 
-    // Check if member is active
-    if (!member.isActive) {
-      return res.status(200).json({
-        success: true,
-        message: 'If an account exists with this email, a password reset link has been sent'
-      });
-    }
-
-    // Generate a 6-digit numeric code
     const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
     const hashedCode = crypto
       .createHash('sha256')
       .update(resetCode)
       .digest('hex');
 
-    // Store hashed code in database with 1 hour expiry
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-    await Token.create({
-      user: member._id,
-      token: hashedCode,
-      type: 'passwordReset',
-      expiresAt
-    });
+    storeResetCode(member._id, hashedCode);
 
-    // Send email with the code (not hashed)
     try {
       await sendPasswordResetEmail(
         member.email,
-        resetCode, // send the code, not a link
+        resetCode,
         member.fullName || member.firstName
       );
-    } catch (emailError) {
-      // Delete the token if email failed
-      await Token.deleteOne({ token: hashedCode });
+    } catch (_emailError) {
+      clearResetCode(member._id);
       return res.status(500).json({
         success: false,
         message: 'Failed to send password reset email. Please try again later.'
@@ -732,8 +692,10 @@ exports.forgotPassword = async (req, res, next) => {
   }
 };
 
-
-// Reset password with code
+/**
+ * Reset password with code
+ * POST /reset-password-with-code
+ */
 exports.resetPasswordWithCode = async (req, res, next) => {
   try {
     const { email, code, newPassword } = req.body;
@@ -752,7 +714,7 @@ exports.resetPasswordWithCode = async (req, res, next) => {
       });
     }
 
-    const member = await Member.findOne({ email: email.toLowerCase() });
+    const member = await Member.findOne({ email: String(email).trim().toLowerCase() });
     if (!member) {
       return res.status(404).json({
         success: false,
@@ -760,39 +722,32 @@ exports.resetPasswordWithCode = async (req, res, next) => {
       });
     }
 
-    // Hash the code to compare with stored hash
-    const hashedCode = crypto
-      .createHash('sha256')
-      .update(code)
-      .digest('hex');
-
-    // Find token in database
-    const tokenDoc = await Token.findOne({
-      user: member._id,
-      token: hashedCode,
-      type: 'passwordReset',
-      expiresAt: { $gt: new Date() }
-    });
-
-    if (!tokenDoc) {
+    const storedCode = getResetCode(member._id);
+    if (!storedCode || storedCode.expiresAt <= Date.now()) {
+      clearResetCode(member._id);
       return res.status(400).json({
         success: false,
         message: 'Invalid or expired verification code'
       });
     }
 
-    // Update password
+    const hashedCode = crypto
+      .createHash('sha256')
+      .update(code)
+      .digest('hex');
+
+    if (hashedCode !== storedCode.hashedCode) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired verification code'
+      });
+    }
+
     member.password = newPassword;
     member.mustResetPassword = false;
     await member.save();
 
-    // Delete the used token
-    await Token.deleteOne({ _id: tokenDoc._id });
-    // Optionally, delete all other password reset tokens for this user
-    await Token.deleteMany({
-      user: member._id,
-      type: 'passwordReset'
-    });
+    clearResetCode(member._id);
 
     res.status(200).json({
       success: true,

@@ -144,22 +144,28 @@ exports.createMember = async (req, res, next) => {
  * Query: churchId, divisionId, familyId, isActive, search, limit (default 50, max 100), skip (default 0)
  */
 exports.getMembers = async (req, res, next) => {
+
   try {
     const { churchId, divisionId, familyId, isActive, search } = req.query;
+
     const limit = Math.min(parseInt(req.query.limit) || 50, 100);
-    const skip = Math.max(parseInt(req.query.skip) || 0, 0);
-    
+    // Support both 'skip' and 'offset' as aliases
+    let skip = 0;
+    if (req.query.offset !== undefined) {
+      skip = Math.max(parseInt(req.query.offset) || 0, 0);
+    } else {
+      skip = Math.max(parseInt(req.query.skip) || 0, 0);
+    }
+
     const filter = {};
     if (churchId) filter.churchId = churchId;
     if (divisionId) filter.divisionId = divisionId;
     if (familyId) filter.familyId = familyId;
     if (isActive !== undefined) filter.isActive = isActive === 'true';
 
-
-    // Regex search for member names and family address
     if (search) {
       const regex = new RegExp(search, 'i');
-      // Find families whose address matches the search (case-insensitive, partial match)
+      // Find families whose address matches the search
       const families = await Family.find({ address: { $regex: search, $options: 'i' } }).select('memberIds');
       let familyMemberIds = [];
       families.forEach(fam => {
@@ -175,18 +181,16 @@ exports.getMembers = async (req, res, next) => {
       if (familyMemberIds.length > 0) {
         orConditions.push({ _id: { $in: familyMemberIds } });
       }
-      // Add direct family address search via population
-      orConditions.push({}); // placeholder for $expr
       filter.$or = orConditions;
     }
 
+    // Get total count before pagination
+    const count = await Member.countDocuments(filter);
 
-    // Get total count before pagination (and before in-memory filter)
-    let count = await Member.countDocuments(filter);
-
-    let members = await Member.find(filter)
-      .limit(limit)
+    const members = await Member.find(filter)
+      .sort({ _id: 1 }) // Ascending order, oldest first
       .skip(skip)
+      .limit(limit)
       .select('-password -parentIds')
       .populate('churchId', 'name')
       .populate('divisionId', 'name')
@@ -200,23 +204,6 @@ exports.getMembers = async (req, res, next) => {
       })
       .lean();
 
-    // If searching by address, filter in-memory for family address match
-    if (search) {
-      const regex = new RegExp(search, 'i');
-      members = members.filter(member => {
-        if (member.familyId && member.familyId.address) {
-          return regex.test(member.familyId.address) ||
-            regex.test(member.fullName) ||
-            regex.test(member.firstName) ||
-            regex.test(member.lastName);
-        }
-        return regex.test(member.fullName) ||
-          regex.test(member.firstName) ||
-          regex.test(member.lastName);
-      });
-      // After in-memory filter, update totalCount to reflect filtered results
-      count = members.length;
-    }
 
     for (const member of members) {
       // Remove spouseId from response
@@ -232,7 +219,7 @@ exports.getMembers = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      count, // total number of matching members (before pagination or after in-memory filter)
+      count, // total number of matching members (before pagination)
       pageCount: members.length, // number of members in this page
       data: members
     });

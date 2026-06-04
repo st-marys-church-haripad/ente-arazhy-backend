@@ -26,6 +26,6 @@ router.post('/reset-password/:memberId', authenticate, resetPassword);
 
 // // Forgot password routes (public)
 router.post('/forgot-password', forgotPassword);
-// router.post('/reset-password-with-token', resetPasswordWithToken);
+router.post('/reset-password-with-code', require('../../controllers/v1/auth/auth.controller').resetPasswordWithCode);
 
 module.exports = router;
