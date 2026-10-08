@@ -5,6 +5,8 @@ const cookieParser = require('cookie-parser');
 const helmet = require('helmet');
 const compression = require('compression');
 const path = require('path');
+const dns = require('dns');
+dns.setServers(['8.8.8.8', '1.1.1.1']);
 
 /* Custom Modules */
 const config = require('./config');
@@ -70,7 +72,7 @@ module.exports = app;
 
 /* Start Server (for local development only) */
 if (require.main === module) {
-  const server = app.listen(PORT);
+  const server = app.listen(PORT,'0.0.0.0');
   const shutdown = async () => {
     await disconnectFromDatabase();
     server.close(() => process.exit(0));

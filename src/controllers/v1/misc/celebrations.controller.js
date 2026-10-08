@@ -624,3 +624,41 @@ exports.getDeathAnniversaries = async (req, res, next) => {
     next(error);
   }
 };
+
+exports.getCelebrationCounts = async (req, res, next) => {
+  try {
+    const snapshot = await getCelebrationSnapshot();
+
+    const today = {
+      birthdays: snapshot.birthdays.today.length,
+      anniversaries: snapshot.anniversaries.today.length,
+      deathAnniversaries: snapshot.deathAnniversaries.today.length
+    };
+
+    today.events =
+      today.birthdays +
+      today.anniversaries +
+      today.deathAnniversaries;
+
+    const thisWeek = {
+      birthdays: snapshot.birthdays.thisWeek.length,
+      anniversaries: snapshot.anniversaries.thisWeek.length,
+      deathAnniversaries: snapshot.deathAnniversaries.thisWeek.length
+    };
+
+    thisWeek.events =
+      thisWeek.birthdays +
+      thisWeek.anniversaries +
+      thisWeek.deathAnniversaries;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        today,
+        thisWeek
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
