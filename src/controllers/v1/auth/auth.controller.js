@@ -242,6 +242,15 @@ exports.login = async (req, res, next) => {
       maxAge: 7 * 24 * 60 * 60 * 1000 /* 7 days */
     });
 
+    await member.populate({
+      path: 'familyId',
+      populate: {
+        path: 'memberIds',
+        select:
+          'firstName lastName fullName gender dob marriageDate maritalStatus spouseId isFamilyHead isActive dateOfDeath',
+      },
+    });
+
     /* Exclude password from response */
     const memberObj = member.toObject();
     delete memberObj.password;
