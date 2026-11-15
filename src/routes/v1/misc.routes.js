@@ -6,6 +6,15 @@ const {
 	getDeathAnniversaries,
 	getCelebrationCounts
 } = require('../../controllers/v1/misc/celebrations.controller');
+const {
+	getBibleVerses,
+	getBibleVerseToday,
+	getBibleVerseById,
+	createBibleVerse,
+	updateBibleVerse,
+	deleteBibleVerse
+} = require('../../controllers/v1/misc/bibleVerse.controller');
+const authorizeRoles = require('../../middlewares/authorizeRoles');
 const authenticate = require('../../middlewares/authenticate');
 const mustResetPassword = require('../../middlewares/mustResetPassword');
 // Misc routes
@@ -14,5 +23,13 @@ router.get('/celebrations/birthdays', authenticate, mustResetPassword, getBirthd
 router.get('/celebrations/anniversaries', authenticate, mustResetPassword, getAnniversaries);
 router.get('/celebrations/death-anniversaries', authenticate, mustResetPassword, getDeathAnniversaries);
 router.get('/celebrations/count', authenticate, mustResetPassword, getCelebrationCounts);
+
+// Bible verses (everyone can view, only admin/vicar can change)
+router.get('/bible-verses', authenticate, mustResetPassword, getBibleVerses);
+router.get('/bible-verses/today', authenticate, mustResetPassword, getBibleVerseToday);
+router.get('/bible-verses/:id', authenticate, mustResetPassword, getBibleVerseById);
+router.post('/bible-verses', authenticate, mustResetPassword, authorizeRoles('ADMIN', 'VICAR'), createBibleVerse);
+router.put('/bible-verses/:id', authenticate, mustResetPassword, authorizeRoles('ADMIN', 'VICAR'), updateBibleVerse);
+router.delete('/bible-verses/:id', authenticate, mustResetPassword, authorizeRoles('ADMIN', 'VICAR'), deleteBibleVerse);
 
 module.exports = router;

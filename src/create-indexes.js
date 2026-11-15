@@ -11,6 +11,7 @@ require('../src/models/event.model');
 require('../src/models/family.model');
 require('../src/models/member.model');
 require('../src/models/token.model');
+require('../src/models/bibleVerse.model');
 
 (async () => {
   await connectToDatabase();
