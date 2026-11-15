@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const { verifyAccessToken } = require('../lib/jwt');
 const Member = require('../models/member.model');
 
@@ -16,11 +17,19 @@ const authenticate = async (req, res, next) => {
       });
     }
 
-    const token = authHeader.substring(7);
+    const token = authHeader.substring(7).trim();
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authorization header missing or malformed'
+      });
+    }
+
     const jwtPayload = verifyAccessToken(token);
     const userId = jwtPayload?.id || jwtPayload?._id || jwtPayload?.userId;
 
-    if (!userId) {
+    if (!userId || !mongoose.isValidObjectId(userId)) {
       return res.status(401).json({
         success: false,
         message: 'Invalid access token payload'
@@ -28,8 +37,10 @@ const authenticate = async (req, res, next) => {
     }
 
     /* Fetch current user role from database for authorization checks */
-    const user = await Member.findById(userId).select('role isActive mustResetPassword');
-    
+    const user = await Member.findById(userId)
+      .select('role isActive mustResetPassword familyId')
+      .lean();
+
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -50,6 +61,7 @@ const authenticate = async (req, res, next) => {
       _id: userId,
       id: userId,
       role: user.role,
+      familyId: user.familyId || null,
       mustResetPassword: Boolean(user.mustResetPassword),
       userName: jwtPayload?.userName || jwtPayload?.username || null
     };

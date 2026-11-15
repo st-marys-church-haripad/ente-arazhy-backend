@@ -13,6 +13,6 @@ router.get('/celebrations', authenticate, mustResetPassword, getEventsSummary);
 router.get('/celebrations/birthdays', authenticate, mustResetPassword, getBirthdays);
 router.get('/celebrations/anniversaries', authenticate, mustResetPassword, getAnniversaries);
 router.get('/celebrations/death-anniversaries', authenticate, mustResetPassword, getDeathAnniversaries);
-router.get('/celebrations/count', getCelebrationCounts);
+router.get('/celebrations/count', authenticate, mustResetPassword, getCelebrationCounts);
 
 module.exports = router;

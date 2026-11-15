@@ -1,12 +1,23 @@
 const Family = require('../../../models/family.model');
 const Member = require('../../../models/member.model');
 
+const isAdminOrVicar = (user) => user?.role === 'ADMIN' || user?.role === 'VICAR';
+
+const MEMBER_FIELDS = 'firstName lastName fullName gender phone email avatarUrl spouseId familyId';
+
 /**
  * Create a new family
  * POST /
  */
 exports.createFamily = async (req, res, next) => {
   try {
+    if (!isAdminOrVicar(req.user)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Admin access required'
+      });
+    }
+
     const { churchId, divisionId, familyName, address, headMemberId } = req.body;
 
     const family = new Family({
@@ -39,18 +50,20 @@ exports.getFamilies = async (req, res, next) => {
     const { churchId, divisionId } = req.query;
     const limit = Math.min(parseInt(req.query.limit) || 50, 100);
     const skip = Math.max(parseInt(req.query.skip) || 0, 0);
-    
+
     const filter = {};
     if (churchId) filter.churchId = churchId;
     if (divisionId) filter.divisionId = divisionId;
 
     const families = await Family.find(filter)
+      .sort({ _id: 1 })
       .populate('churchId', 'name')
       .populate('divisionId', 'name')
       .populate('headMemberId', 'firstName lastName fullName')
-      .populate('memberIds', 'firstName lastName fullName gender phone email avatarUrl spouseId familyId')
+      .populate('memberIds', MEMBER_FIELDS)
       .limit(limit)
-      .skip(skip);
+      .skip(skip)
+      .lean();
 
     res.status(200).json({
       success: true,
@@ -73,7 +86,8 @@ exports.getFamilyById = async (req, res, next) => {
       .populate('churchId', 'name')
       .populate('divisionId', 'name')
       .populate('headMemberId', 'firstName lastName fullName')
-      .populate('memberIds', 'firstName lastName fullName gender phone email avatarUrl spouseId familyId');
+      .populate('memberIds', MEMBER_FIELDS)
+      .lean();
 
     if (!family) {
       return res.status(404).json({
@@ -98,10 +112,11 @@ exports.getFamilyById = async (req, res, next) => {
 exports.getFamilyMembers = async (req, res, next) => {
   try {
     const { id } = req.params;
-    
+
     const family = await Family.findById(id)
-      .populate('memberIds', 'firstName lastName fullName gender phone email avatarUrl spouseId familyId');
-    
+      .populate('memberIds', MEMBER_FIELDS)
+      .lean();
+
     if (!family) {
       return res.status(404).json({
         success: false,
@@ -128,17 +143,38 @@ exports.getFamilyMembers = async (req, res, next) => {
 exports.updateFamily = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const privileged = isAdminOrVicar(req.user);
+
+    /* Admin/vicar can edit any family; a family head can edit only their own */
+    const isOwnFamilyHead =
+      req.user?.role === 'FAMILY_HEAD' &&
+      req.user.familyId &&
+      String(req.user.familyId) === String(id);
+
+    if (!privileged && !isOwnFamilyHead) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not allowed to update this family'
+      });
+    }
+
     const { churchId, divisionId, familyName, address, headMemberId, memberIds } = req.body;
+
+    /* Structural fields (church, division, head, member list) are admin/vicar only */
+    const updateData = privileged
+      ? { churchId, divisionId, familyName, address, headMemberId, memberIds }
+      : { familyName, address };
 
     const family = await Family.findByIdAndUpdate(
       id,
-      { churchId, divisionId, familyName, address, headMemberId, memberIds },
+      updateData,
       { new: true, runValidators: true }
     )
       .populate('churchId', 'name')
       .populate('divisionId', 'name')
       .populate('headMemberId', 'firstName lastName fullName')
-      .populate('memberIds', 'firstName lastName fullName gender phone email avatarUrl spouseId familyId');
+      .populate('memberIds', MEMBER_FIELDS)
+      .lean();
 
     if (!family) {
       return res.status(404).json({
@@ -163,11 +199,18 @@ exports.updateFamily = async (req, res, next) => {
  */
 exports.deleteFamily = async (req, res, next) => {
   try {
+    if (!isAdminOrVicar(req.user)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Admin access required'
+      });
+    }
+
     const { id } = req.params;
-    
+
     /* Prevent deletion of families with members */
-    const memberCount = await Member.countDocuments({ familyId: id });
-    if (memberCount > 0) {
+    const hasMembers = await Member.exists({ familyId: id });
+    if (hasMembers) {
       return res.status(400).json({
         success: false,
         message: 'Cannot delete family with existing members'

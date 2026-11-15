@@ -30,15 +30,15 @@ const toIST = (date) => {
  */
 const getWeekRange = (today = new Date()) => {
   const istToday = toIST(today);
-  const day = istToday.getDay();
+  const day = istToday.getUTCDay();
   const diffToMonday = (day + 6) % 7;
   const start = new Date(istToday);
-  start.setHours(0, 0, 0, 0);
-  start.setDate(istToday.getDate() - diffToMonday);
+  start.setUTCHours(0, 0, 0, 0);
+  start.setUTCDate(istToday.getUTCDate() - diffToMonday);
 
   const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  end.setHours(23, 59, 59, 999);
+  end.setUTCDate(start.getUTCDate() + 6);
+  end.setUTCHours(23, 59, 59, 999);
   return { start, end };
 };
 
@@ -47,7 +47,7 @@ const getWeekRange = (today = new Date()) => {
  */
 const toMonthDay = (d) => {
   const ist = toIST(d);
-  return { month: ist.getMonth(), day: ist.getDate() };
+  return { month: ist.getUTCMonth(), day: ist.getUTCDate() };
 };
 
 /**
@@ -68,12 +68,10 @@ const isInWeek = (dateValue, weekStart, weekEnd, today) => {
   if (!dateValue) return false;
 
   const monthDay = toMonthDay(new Date(dateValue));
-  const year = toIST(today).getFullYear();
+  const year = toIST(today).getUTCFullYear();
 
-  // Check event date in current year (IST)
-  const eventDate = new Date(toIST(new Date(year, monthDay.month, monthDay.day, 12, 0, 0, 0)));
-  // Also check next year's date in case week crosses year boundary (IST)
-  const eventDateNextYear = new Date(toIST(new Date(year + 1, monthDay.month, monthDay.day, 12, 0, 0, 0)));
+  const eventDate = new Date(Date.UTC(year, monthDay.month, monthDay.day, 12));
+  const eventDateNextYear = new Date(Date.UTC(year + 1, monthDay.month, monthDay.day, 12));
 
   return (
     (eventDate >= weekStart && eventDate <= weekEnd) ||
@@ -88,10 +86,9 @@ const calcAnniversaryYears = (marriageDate, today) => {
   if (!marriageDate) return null;
   const m = toIST(new Date(marriageDate));
   const t = toIST(today);
-  let years = t.getFullYear() - m.getFullYear();
+  let years = t.getUTCFullYear() - m.getUTCFullYear();
 
-  // Adjust if anniversary hasn't occurred yet this year (IST)
-  const annivThisYear = new Date(t.getFullYear(), m.getMonth(), m.getDate());
+  const annivThisYear = new Date(Date.UTC(t.getUTCFullYear(), m.getUTCMonth(), m.getUTCDate()));
   if (t < annivThisYear) years -= 1;
 
   return years < 0 ? 0 : years;
@@ -104,9 +101,9 @@ const calcYearsSinceDate = (dateValue, today) => {
   if (!dateValue) return null;
   const d = toIST(new Date(dateValue));
   const t = toIST(today);
-  let years = t.getFullYear() - d.getFullYear();
+  let years = t.getUTCFullYear() - d.getUTCFullYear();
 
-  const thisYearDate = new Date(t.getFullYear(), d.getMonth(), d.getDate());
+  const thisYearDate = new Date(Date.UTC(t.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
   if (t < thisYearDate) years -= 1;
 
   return years < 0 ? 0 : years;
@@ -132,8 +129,8 @@ const normalizePeriod = (period) => {
 
 const getMonthDayKey = (date) => {
   const ist = toIST(date);
-  const month = String(ist.getMonth() + 1).padStart(2, '0');
-  const day = String(ist.getDate()).padStart(2, '0');
+  const month = String(ist.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(ist.getUTCDate()).padStart(2, '0');
   return `${month}-${day}`;
 };
 
@@ -143,7 +140,7 @@ const getWeekMonthDayKeys = (today) => {
 
   for (let i = 0; i < 7; i += 1) {
     const d = new Date(weekStart);
-    d.setDate(weekStart.getDate() + i);
+    d.setUTCDate(weekStart.getUTCDate() + i);
     keys.push(getMonthDayKey(d));
   }
 

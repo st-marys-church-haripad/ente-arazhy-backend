@@ -30,9 +30,7 @@ exports.getChurches = async (req, res, next) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 50, 100);
     const skip = Math.max(parseInt(req.query.skip) || 0, 0);
-
-    const churches = await Church.find().limit(limit).skip(skip);
-
+    const churches = await Church.find().sort({ _id: 1 }).limit(limit).skip(skip).lean();
     res.status(200).json({
       success: true,
       count: churches.length,
@@ -50,7 +48,7 @@ exports.getChurches = async (req, res, next) => {
 exports.getChurchById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const church = await Church.findById(id);
+    const church = await Church.findById(id).lean();
 
     if (!church) {
       return res.status(404).json({

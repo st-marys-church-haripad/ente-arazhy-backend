@@ -3,8 +3,8 @@ const mongoose = require('mongoose');
 
 const tokenSchema = new Schema({
     user: {
-        type: require('mongoose').Schema.Types.ObjectId,
-        ref: 'User',
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Member',
         required: true,
     },
     token: {
@@ -20,6 +20,10 @@ const tokenSchema = new Schema({
         type: Date,
         default: null
     },
+    attempts: {
+        type: Number,
+        default: 0
+    },
     createdAt: {
         type: Date,
         default: Date.now,
@@ -29,6 +33,7 @@ const tokenSchema = new Schema({
 
 // Index for faster queries
 tokenSchema.index({ token: 1, type: 1 });
+tokenSchema.index({ user: 1, type: 1 });
 tokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 module.exports = mongoose.model('Token', tokenSchema);

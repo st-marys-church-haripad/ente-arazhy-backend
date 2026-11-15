@@ -12,10 +12,12 @@ const parseWhitelistOrigins = () => {
   return envOrigins.length > 0 ? envOrigins : ['http://localhost:3000'];
 };
 
+const isCloud = Boolean(process.env.K_SERVICE || process.env.FUNCTION_TARGET);
+
 const config = {
   /* Server Configuration */
   PORT: parseInt(process.env.PORT, 10) || 3000,
-  NODE_ENV: process.env.NODE_ENV || 'development',
+  NODE_ENV: process.env.NODE_ENV || (isCloud ? 'production' : 'development'),
   WHITELIST_ORIGINS: parseWhitelistOrigins(),
 
   /* Database Configuration */
@@ -41,5 +43,17 @@ const config = {
   /* Frontend Configuration */
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3000'
 };
+
+const required = ['MONGO_URI', 'JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET', 'EMAIL_USER', 'EMAIL_PASSWORD'];
+const missing = required.filter((key) => !process.env[key]);
+if (missing.length > 0) {
+  console.error(`Missing environment variables: ${missing.join(', ')}`);
+}
+if (
+  config.JWT_ACCESS_SECRET &&
+  (config.JWT_ACCESS_SECRET.length < 32 || config.JWT_ACCESS_SECRET === config.JWT_REFRESH_SECRET)
+) {
+  console.error('JWT secrets must be different and at least 32 characters long.');
+}
 
 module.exports = config;

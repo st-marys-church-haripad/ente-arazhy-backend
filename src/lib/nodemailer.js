@@ -21,20 +21,27 @@ const transporter = nodemailer.createTransport({
   host: config.EMAIL_HOST,
   port: emailPort,
   secure: emailPort === 465,
+  requireTLS: emailPort === 587, // never fall back to unencrypted SMTP
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 20000,
   auth: {
     user: config.EMAIL_USER,
     pass: config.EMAIL_PASSWORD,
   },
 });
 
-// Verify SMTP configuration and report errors
-transporter.verify((error) => {
-  if (error) {
-    console.error('Email transporter verification failed:', error.message);
-  } else {
-    console.log('Email transporter is ready');
-  }
-});
+// Verify SMTP configuration locally only (on Cloud Functions it would add an
+// SMTP round trip to every cold start)
+if (!process.env.K_SERVICE && !process.env.FUNCTION_TARGET) {
+  transporter.verify((error) => {
+    if (error) {
+      console.error('Email transporter verification failed:', error.message);
+    } else {
+      console.log('Email transporter is ready');
+    }
+  });
+}
 
 // Escape dynamic values before inserting them into HTML
 const escapeHtml = (value) =>

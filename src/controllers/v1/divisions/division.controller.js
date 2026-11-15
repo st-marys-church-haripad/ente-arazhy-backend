@@ -32,8 +32,7 @@ exports.getDivisions = async (req, res, next) => {
     const limit = Math.min(parseInt(req.query.limit) || 50, 100);
     const skip = Math.max(parseInt(req.query.skip) || 0, 0);
     const filter = churchId ? { churchId } : {};
-    
-    const divisions = await Division.find(filter).populate('churchId', 'name').limit(limit).skip(skip);
+    const divisions = await Division.find(filter).sort({ _id: 1 }).populate('churchId', 'name').limit(limit).skip(skip).lean();
 
     res.status(200).json({
       success: true,
@@ -52,7 +51,7 @@ exports.getDivisions = async (req, res, next) => {
 exports.getDivisionById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const division = await Division.findById(id).populate('churchId', 'name');
+    const division = await Division.findById(id).populate('churchId', 'name').lean();
 
     if (!division) {
       return res.status(404).json({

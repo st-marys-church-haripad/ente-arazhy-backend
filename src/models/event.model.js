@@ -16,4 +16,6 @@ const event = new Schema({
     }
 });
 
+event.index({ date: 1 });
+
 module.exports = mongoose.model('Event', event);

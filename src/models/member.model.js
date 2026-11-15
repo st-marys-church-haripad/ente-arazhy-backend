@@ -21,9 +21,9 @@ const memberSchema = new mongoose.Schema({
     index: true
   },
 
-  firstName: { type: String, required: true },
-  lastName: String,
-  fullName: { type: String, index: true },
+  firstName: { type: String, required: true, trim: true, maxlength: 100 },
+  lastName: { type: String, trim: true, maxlength: 100 },
+  fullName: { type: String, index: true, trim: true, maxlength: 200 },
 
   houseNumber: Number,
   gender: String,
@@ -31,8 +31,8 @@ const memberSchema = new mongoose.Schema({
   marriageDate: Date,
   maritalStatus: String,
 
-  email: { type: String, sparse: true },
-  phone: { type: String, sparse: true },
+  email: { type: String, sparse: true, trim: true, maxlength: 254 },
+  phone: { type: String, sparse: true, trim: true, maxlength: 20 },
   age: { type: Number, default: null },
 
 
@@ -66,10 +66,23 @@ const memberSchema = new mongoose.Schema({
   dateOfDeath: { type: Date, default: null },
   isActive: { type: Boolean, default: true },
   mustResetPassword: { type: Boolean, default: true },
+  failedLoginAttempts: { type: Number, select: false },
+  lockUntil: { type: Date, select: false },
 
 }, { timestamps: true });
 
-memberSchema.index({ fullName: "text", firstName: "text", lastName: "text" });
+// memberSchema.index({ fullName: "text", firstName: "text", lastName: "text" });
+
+// Login lookup by house number
+memberSchema.index({ houseNumber: 1 });
+
+// Never include the password hash when a document is serialised to JSON
+memberSchema.set('toJSON', {
+  transform: (doc, ret) => {
+    delete ret.password;
+    return ret;
+  }
+});
 
 memberSchema.pre('save', async function (next) {
   if (!this.isModified('password') || !this.password) {

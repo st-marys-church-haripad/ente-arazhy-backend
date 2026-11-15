@@ -1,6 +1,8 @@
 const router = require('express').Router();
 const authenticate = require('../../middlewares/authenticate');
-const adminOnly = require('../../middlewares/adminOnly');
+const authorizeRoles = require('../../middlewares/authorizeRoles');
+const mustResetPassword = require('../../middlewares/mustResetPassword');
+const limiter = require('../../lib/express_rate_limit');
 const {
   register,
   login,
@@ -11,21 +13,33 @@ const {
   sendFamilyHeadTemporaryPasswords,
   resetPassword,
   forgotPassword,
-  resetPasswordWithToken
+  resetPasswordWithCode
 } = require('../../controllers/v1/auth/auth.controller');
 
 // Auth routes
-router.post('/register', register);
-router.post('/login', login);
-router.post('/refresh', refreshToken);
+router.post('/register', authenticate, mustResetPassword, authorizeRoles('ADMIN', 'VICAR'), register);
+router.post('/login', limiter.authLimiter, login);
+router.post('/refresh', limiter.authLimiter, refreshToken);
 router.post('/logout', authenticate, logout);
 router.post('/change-password-me', authenticate, changePasswordMe);
-router.post('/family-heads/send-temporary-passwords', sendFamilyHeadTemporaryPasswords);
+router.post(
+  '/family-heads/send-temporary-passwords',
+  authenticate,
+  mustResetPassword,
+  authorizeRoles('ADMIN', 'VICAR'),
+  sendFamilyHeadTemporaryPasswords
+);
 router.post('/change-password/:memberId', authenticate, changePassword);
-router.post('/reset-password/:memberId', authenticate, resetPassword);
+router.post(
+  '/reset-password/:memberId',
+  authenticate,
+  mustResetPassword,
+  authorizeRoles('ADMIN', 'VICAR'),
+  resetPassword
+);
 
-// // Forgot password routes (public)
-router.post('/forgot-password', forgotPassword);
-router.post('/reset-password-with-code', require('../../controllers/v1/auth/auth.controller').resetPasswordWithCode);
+// Forgot password routes (public, strictly rate limited)
+router.post('/forgot-password', limiter.sensitiveLimiter, forgotPassword);
+router.post('/reset-password-with-code', limiter.sensitiveLimiter, resetPasswordWithCode);
 
 module.exports = router;

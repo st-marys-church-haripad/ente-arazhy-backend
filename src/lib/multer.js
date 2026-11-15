@@ -1,12 +1,32 @@
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
+const crypto = require('crypto');
+
+const isCloudFunction = Boolean(process.env.K_SERVICE || process.env.FUNCTION_TARGET);
+
+// Cloud Functions only allows writing to the temp directory (files there are NOT permanent)
+const uploadsDir = isCloudFunction
+    ? path.join(os.tmpdir(), 'uploads', 'family-photos')
+    : path.join(__dirname, '../../uploads/family-photos');
 
 // Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, '../../uploads/family-photos');
-if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
+try {
+    if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+} catch (err) {
+    console.error('Could not create uploads directory:', err.message);
 }
+
+// Extension comes from the validated mime type, never from the client's filename
+const EXTENSIONS = {
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/webp': '.webp',
+    'image/gif': '.gif'
+};
 
 // Configure storage
 const storage = multer.diskStorage({
@@ -14,10 +34,13 @@ const storage = multer.diskStorage({
         cb(null, uploadsDir);
     },
     filename: (req, file, cb) => {
-        // Create unique filename with timestamp
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const ext = path.extname(file.originalname);
-        const name = path.basename(file.originalname, ext);
+        const uniqueSuffix = Date.now() + '-' + crypto.randomBytes(6).toString('hex');
+        const ext = EXTENSIONS[file.mimetype] || '';
+        const name = path
+            .basename(file.originalname, path.extname(file.originalname))
+            .replace(/[^a-zA-Z0-9_-]/g, '-')
+            .replace(/-+/g, '-')
+            .slice(0, 40) || 'photo';
         cb(null, `${name}-${uniqueSuffix}${ext}`);
     }
 });
@@ -28,7 +51,9 @@ const fileFilter = (req, file, cb) => {
     if (allowedMimes.includes(file.mimetype)) {
         cb(null, true);
     } else {
-        cb(new Error('Only image files (JPEG, PNG, WebP, GIF) are allowed'), false);
+        const error = new Error('Only image files (JPEG, PNG, WebP, GIF) are allowed');
+        error.statusCode = 400;
+        cb(error, false);
     }
 };
 

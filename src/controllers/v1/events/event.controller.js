@@ -30,8 +30,7 @@ exports.getEvents = async (req, res, next) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 50, 100);
     const skip = Math.max(parseInt(req.query.skip) || 0, 0);
-    
-    const events = await Event.find().sort({ date: 1 }).limit(limit).skip(skip);
+    const events = await Event.find().sort({ date: 1, _id: 1 }).limit(limit).skip(skip).lean();
 
     res.status(200).json({
       success: true,
@@ -50,8 +49,7 @@ exports.getEvents = async (req, res, next) => {
 exports.getEventById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const event = await Event.findById(id);
-
+    const event = await Event.findById(id).lean();
     if (!event) {
       return res.status(404).json({
         success: false,
