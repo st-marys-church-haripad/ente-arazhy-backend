@@ -1,10 +1,11 @@
 const mongoose = require('mongoose');
 const { verifyAccessToken } = require('../lib/jwt');
 const Member = require('../models/member.model');
+const Token = require('../models/token.model');
 
 /**
  * Authentication Middleware
- * Validates JWT token, extracts user information, and fetches role from database
+ * Validates JWT token, checks it has not been revoked, and fetches role from database
  */
 const authenticate = async (req, res, next) => {
   try {
@@ -36,10 +37,22 @@ const authenticate = async (req, res, next) => {
       });
     }
 
-    /* Fetch current user role from database for authorization checks */
-    const user = await Member.findById(userId)
-      .select('role isActive mustResetPassword familyId')
-      .lean();
+    /* Member lookup and blacklist check run at the same time */
+    const [user, isBlacklisted] = await Promise.all([
+      Member.findById(userId)
+        .select('role isActive mustResetPassword familyId +tokensValidAfter')
+        .lean(),
+      jwtPayload.jti
+        ? Token.exists({ token: jwtPayload.jti, type: 'blacklist' })
+        : null
+    ]);
+
+    if (isBlacklisted) {
+      return res.status(401).json({
+        success: false,
+        message: 'Token has been revoked'
+      });
+    }
 
     if (!user) {
       return res.status(401).json({
@@ -55,8 +68,21 @@ const authenticate = async (req, res, next) => {
       });
     }
 
+    /* Tokens issued before a password reset / forced sign-out are no longer valid */
+    if (
+      user.tokensValidAfter &&
+      jwtPayload.iat < Math.floor(new Date(user.tokensValidAfter).getTime() / 1000)
+    ) {
+      return res.status(401).json({
+        success: false,
+        message: 'Token has been revoked'
+      });
+    }
+
     /* Attach user data to request */
     req.userId = userId;
+    req.tokenId = jwtPayload.jti || null;
+    req.tokenExp = jwtPayload.exp || null;
     req.user = {
       _id: userId,
       id: userId,

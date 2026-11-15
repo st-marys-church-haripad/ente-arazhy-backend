@@ -417,6 +417,16 @@ exports.logout = async (req, res, next) => {
   try {
     const refreshToken = req.cookies?.refreshToken;
 
+    /* Blacklist the access token used for this request until its natural expiry
+       (the TTL index on expiresAt deletes the record automatically) */
+    if (req.tokenId && req.tokenExp) {
+      await Token.updateOne(
+        { token: req.tokenId, type: 'blacklist' },
+        { $setOnInsert: { user: req.userId, expiresAt: new Date(req.tokenExp * 1000) } },
+        { upsert: true }
+      );
+    }
+
     if (!refreshToken || !isStr(refreshToken)) {
       return res.status(400).json({
         success: false,

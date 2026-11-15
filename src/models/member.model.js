@@ -68,7 +68,7 @@ const memberSchema = new mongoose.Schema({
   mustResetPassword: { type: Boolean, default: true },
   failedLoginAttempts: { type: Number, select: false },
   lockUntil: { type: Date, select: false },
-
+  tokensValidAfter: { type: Date, select: false }
 }, { timestamps: true });
 
 // memberSchema.index({ fullName: "text", firstName: "text", lastName: "text" });

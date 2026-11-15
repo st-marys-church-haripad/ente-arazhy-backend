@@ -13,7 +13,7 @@ const tokenSchema = new Schema({
     },
     type: {
         type: String,
-        enum: ['refresh', 'passwordReset'],
+        enum: ['refresh', 'passwordReset', 'blacklist'],
         default: 'refresh'
     },
     expiresAt: {

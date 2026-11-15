@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const config = require('../config');
 
 const ALGORITHM = 'HS256';
@@ -14,7 +15,8 @@ const generateAccessToken = (payload) => {
   return jwt.sign(payload, config.JWT_ACCESS_SECRET, {
     algorithm: ALGORITHM,
     expiresIn: config.ACCESS_TOKEN_EXPIRY,
-    subject: 'accessApi'
+    subject: 'accessApi',
+    jwtid: crypto.randomUUID()
   });
 };
 
