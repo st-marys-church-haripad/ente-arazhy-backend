@@ -1,5 +1,5 @@
 const ChurchInfo = require('../../../models/churchInfo.model');
-const { CHURCH_INFO, ADMINISTRATION_SECTIONS } = require('../../../constants/churchInfo');
+const { CHURCH_INFO, ADMINISTRATION_SECTIONS } = require('../../../constants/administrationData');
 
 const KEY = 'main';
 const isStr = (v) => typeof v === 'string';
