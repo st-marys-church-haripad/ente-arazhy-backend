@@ -7,6 +7,11 @@ const {
 	getCelebrationCounts
 } = require('../../controllers/v1/misc/celebrations.controller');
 const {
+	getChurchInfo,
+	updateChurchInfo,
+	resetChurchInfo
+} = require('../../controllers/v1/misc/churchInfo.controller');
+const {
 	getBibleVerses,
 	getBibleVerseToday,
 	getBibleVerseById,
@@ -31,5 +36,10 @@ router.get('/bible-verses/:id', authenticate, mustResetPassword, getBibleVerseBy
 router.post('/bible-verses', authenticate, mustResetPassword, authorizeRoles('ADMIN', 'VICAR'), createBibleVerse);
 router.put('/bible-verses/:id', authenticate, mustResetPassword, authorizeRoles('ADMIN', 'VICAR'), updateBibleVerse);
 router.delete('/bible-verses/:id', authenticate, mustResetPassword, authorizeRoles('ADMIN', 'VICAR'), deleteBibleVerse);
+
+// Church info (everyone can view, only admin/vicar can change)
+router.get('/church-info', authenticate, mustResetPassword, getChurchInfo);
+router.put('/church-info', authenticate, mustResetPassword, authorizeRoles('ADMIN', 'VICAR'), updateChurchInfo);
+router.delete('/church-info', authenticate, mustResetPassword, authorizeRoles('ADMIN', 'VICAR'), resetChurchInfo);
 
 module.exports = router;
