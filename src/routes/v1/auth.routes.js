@@ -33,8 +33,6 @@ router.post('/change-password/:memberId', authenticate, changePassword);
 router.post(
   '/reset-password/:memberId',
   authenticate,
-  mustResetPassword,
-  authorizeRoles('ADMIN', 'VICAR'),
   resetPassword
 );
 
