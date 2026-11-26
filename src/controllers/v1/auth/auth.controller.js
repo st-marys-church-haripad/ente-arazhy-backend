@@ -697,13 +697,6 @@ exports.sendFamilyHeadTemporaryPasswords = async (req, res, next) => {
  */
 exports.resetPassword = async (req, res, next) => {
   try {
-    if (!isAdminOrVicar(req.user)) {
-      return res.status(403).json({
-        success: false,
-        message: 'Admin access required'
-      });
-    }
-
     const { memberId } = req.params;
     const { newPassword } = req.body;
 
@@ -719,14 +712,6 @@ exports.resetPassword = async (req, res, next) => {
       return res.status(404).json({
         success: false,
         message: 'Member not found'
-      });
-    }
-
-    /* Only an admin can reset an admin's password */
-    if (member.role === 'ADMIN' && req.user.role !== 'ADMIN') {
-      return res.status(403).json({
-        success: false,
-        message: 'Only an admin can reset an admin password'
       });
     }
 
